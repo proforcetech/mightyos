@@ -20,6 +20,11 @@ Sources: `guide.txt`, plus design reports from the gui-expert and security-exper
 | D8 | **No `sudo` anywhere.** Privileged actions go through polkit and a small D-Bus helper | The MightyOS session user is not in the `sudo` group. A separate admin account exists |
 | D9 | Emulation targets: Nintendo retro, Sega/arcade, Sony (PS1/PS2/PSP), GameCube/Wii/DS/3DS | Via RetroArch cores plus standalone emulators (Dolphin, PCSX2, PPSSPP, DuckStation, melonDS, Azahar), all as Flatpaks |
 | D10 | Media: Kodi/local, Jellyfin/Plex, streaming web apps, Moonlight game streaming | Web apps run in a kiosk-mode browser Flatpak. Netflix and similar services need Widevine, so use Chrome or Chromium |
+| D11 | Artwork comes from **SteamGridDB** | Each user supplies their own API key, entered in Settings via the on-screen keyboard. The key is stored in libsecret, or as a `0600` file if that isn't available, and is never logged. Steam games use Steam's local library art first |
+| D12 | **Steam is a game "system", like an emulator.** Games → [Steam] → one tile per installed game | Steam games come from parsing `appmanifest_*.acf` files. They use the same SystemList → GameGrid screens as emulators. Other PC launchers (Heroic, Lutris) can join later the same way |
+| D13 | **Multiple user profiles**, plus a **kids/restricted mode** | Each profile has its own favorites, history, saves folder, theme and per-profile settings. A kids profile only shows allowed systems, games and apps, filtered by content rating, and can't use the store or settings. Leaving a kids profile requires the PIN. See §4 for its limits |
+| D14 | **HDMI-CEC TV remote** support | The TV remote's D-pad, OK, Back and Home buttons go into InputRouter as the same actions as other devices. Uses libcec or the kernel CEC framework (`/dev/cec*`). **Most PC GPUs don't expose CEC on their HDMI port**, so this usually needs a USB-CEC adapter such as a Pulse-Eight, or a mini PC with built-in CEC |
+| D15 | License: **MIT** | `LICENSE` at the repo root. Third-party pieces keep their own licenses (Qt is LGPL and dynamically linked; SDL3 is zlib) |
 
 **Conflict resolved:** the GUI design suggested passing the PIN through polkit/PAM for system-wide installs. The security review rejects that because it would weaken every polkit decision on the system. Instead, installs are `--user` (no prompt needed), and the PIN is checked **only** by our own helper for our own action IDs.
 
@@ -46,6 +51,7 @@ mightyos-helper (system D-Bus service, hardened systemd unit)
 ```
 
 - QML talks to C++ through `QML_SINGLETON` services and `QAbstractListModel` models. Slow work runs on worker threads, so the UI thread never blocks.
+- **Profiles:** `ProfileService` decides which profile is active. Each profile's data lives under `.../mightyos/profiles/<profile-id>/` inside the config, data and state directories below. Global settings and the library cache are shared between profiles.
 - **Files** (XDG locations, JSON format):
   - `~/.config/mightyos/`: `settings.json`, `favorites.json`, `input.json`, `systems.d/`
   - `~/.local/share/mightyos/`: user app manifests, scraped artwork
@@ -89,7 +95,11 @@ Long game lists use a **grid with A–Z jump** rather than a single horizontal r
 | Add remotes, Flatpak sandbox overrides, apt/system updates, set or reset the PIN | **Admin password** via our own polkit agent (on-screen keyboard) |
 
 - PIN storage: argon2id (64 MiB, t=3), in a root-only `0600` file. Lockout persists across restarts, with back-off after 3 failures and a full disable after 10. There is no master PIN and no reset backdoor.
-- **Parental lock is a UI feature, not a security boundary**, and it will be labelled that way.
+- **Parental lock and kids mode are UI features, not a security boundary**, and will be labelled that way. All profiles run as the same Unix user, so a determined child who reaches a terminal or browser could get around them. The mitigations:
+  - kids profiles have no store, settings, browser or "Close to desktop"
+  - leaving a kids profile requires the PIN, checked by the helper
+  - the session starts in the last profile, or a chosen default kids profile.
+  A stronger later option is a separate Unix user per kids profile; that would be a session switch.
 - Launching apps:
   - Use argument lists with `--` and never a shell.
   - Clear the environment before launch (strip `LD_PRELOAD` and similar).
@@ -108,14 +118,14 @@ Long game lists use a **grid with A–Z jump** rather than a single horizontal r
 |---|---|---|---|---|
 | **M0** | Walking skeleton | CMake + `qt_add_qml_module`; `--windowed`/`--fullscreen` flags; hard-coded category tiles; keyboard navigation and focus ring; launch a test app with QProcess and return focus on exit | gui-expert | code-reviewer |
 | **M1** | Navigation framework | Tile, TileRow, TileGrid, NavStack with focus memory, PromptBar, mouse support, Theme with resolution-independent scaling and safe area, SoundFx. **Carried over from the M0 review:** (a) move InputMap into a C++ `InputRouter` singleton that owns the key table, repeat policy and blocked/mute state, with a thread-safe queued entry point for SDL in M3; (b) send actions to the top NavStack screen so unhandled actions bubble up, and make mouse clicks activate their own tile; (c) save focus as a path {screen,row,index}; (d) a static `mightyos_core` library shared by the app and the tests; (e) Qt Quick Test coverage for input rules and Launcher crash tests; (f) refresh the clock when the window becomes active; (g) a shared JS icon table | gui-expert | code-reviewer |
-| **M2** | Data layer | AppRegistry (`.desktop` files and manifests), favorites (X to toggle, reorder), async artwork and cache, navstate persistence | general-purpose + gui-expert | code-reviewer |
-| **M3** | Gamepad | SDL3 thread, key repeat, hotplug, button glyphs (Xbox/PS/Nintendo), rumble. **Needs real hardware** (or usbipd-win on WSL) | gui-expert | code-reviewer |
-| **M4** | Emulators | System definitions, RomScanner + SQLite, game grid, RetroArch and standalone emulator launching, per-game core override | general-purpose + gui-expert | code-reviewer + security-expert (launch hygiene) |
+| **M2** | Data layer & profiles | AppRegistry (`.desktop` files and manifests), **ProfileService + profile picker screen** (create, rename, avatar, choose), per-profile favorites (X to toggle, reorder), async artwork and cache, navstate persistence | general-purpose + gui-expert | code-reviewer |
+| **M3** | Gamepad & TV remote | SDL3 thread, key repeat, hotplug, button glyphs (Xbox/PS/Nintendo), rumble. **HDMI-CEC** via libcec or `/dev/cec*`, feeding the same actions. **Needs real hardware** (gamepad, and a CEC adapter or CEC-capable PC) | gui-expert | code-reviewer + security-expert (device access) |
+| **M4** | Emulators & Steam library | System definitions, RomScanner + SQLite, game grid, RetroArch and standalone emulator launching, per-game core override. **Steam as a system** (`.acf` parsing, launching via `steam://rungameid`, detecting game exit). **SteamGridDB scraper** (API key, rate limits, cache) | general-purpose + gui-expert | code-reviewer + security-expert (launch hygiene, API key) |
 | **M5** | Media & streaming | Kodi, Jellyfin, Plex tiles; web-app tiles (kiosk browser); Moonlight host/app tiles | gui-expert | code-reviewer |
 | **M6** | Session | cage session files, scope-based launching, dormant mode while an app runs, Guide overlay, crash recovery, VT/SysRq hardening | general-purpose | security-expert |
 | **M7** | App Store | AppStream browse and search with on-screen keyboard, detail page, permission review, libflatpak install/update/remove with progress | gui-expert + general-purpose | security-expert + code-reviewer |
-| **M8** | Settings & privileges | Display, Audio, Network, Controllers/Bluetooth; polkit agent; `mightyos-helper`; PinPad; first-boot setup wizard | gui-expert + general-purpose | **security-expert (required)** |
-| **M9** | Polish & performance | Target 60 fps, under 150 MB RSS, under 1% idle CPU; software renderer fallback; gamescope spike; Steam library import | gui-expert | code-reviewer |
+| **M8** | Settings, privileges & kids mode | Display, Audio, Network, Controllers/Bluetooth, CEC settings; polkit agent; `mightyos-helper`; PinPad; first-boot setup wizard; **kids/restricted profiles** (allow-lists, rating filter, PIN required to leave) | gui-expert + general-purpose | **security-expert (required)** |
+| **M9** | Polish & performance | Target 60 fps, under 150 MB RSS, under 1% idle CPU; software renderer fallback; gamescope spike | gui-expert | code-reviewer |
 
 M0 to M2 can be built entirely on the WSL dev box. M3 and later need a real x86 test machine for gamepad, session and Flatpak testing.
 
@@ -127,13 +137,12 @@ M0 to M2 can be built entirely on the WSL dev box. M3 and later need a real x86 
 4. **WSLg limits:** no gamepad passthrough by default, and systemd, polkit and Flatpak behave differently there.
 5. **Ubuntu 26.04 packages:** need to confirm SDL3, AppStreamQt6, PolkitQt6 and cage are available.
 6. **DRM streaming:** Netflix and similar services need a Widevine-capable browser.
+7. **CEC hardware:** most PC GPUs have no CEC on HDMI, so it needs an adapter (D14).
+8. **SteamGridDB terms and rate limits:** each user has to supply their own API key, so there's no shared key in the binary.
 
 ## 7. Open questions
 
-- Q1: Artwork scraping source (ScreenScraper, TheGamesDB, SteamGridDB)? Some need API keys.
-- Q2: Is Steam a full library source (games show up in Games) or just a tile that opens Steam's own UI? Proposal: just a tile at first, library import in M9.
-- Q3: One user, or multiple profiles (for example kids' profiles with their own parental lock)?
-- Q4: HDMI-CEC TV-remote support: in scope?
+- ~~Q1–Q4~~ answered → D11–D14.
 - Q5: Is a real x86 test machine available, and roughly when?
 - Q6: Panic-chord approach (Risk 1).
 
