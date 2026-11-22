@@ -1,0 +1,49 @@
+Goal: create a light-weight GUI and "app" system. The light-weight system will use large tiles which can be scrolled through horizontally.
+
+The initially applications installed on the with the GUI system would console emulators, gaming environments such as steam, media plays and media streaming.
+
+The GUI needs to be able to be easily navigable with a keyboard, mouse and keyboard or gaming remote.
+
+
+Essentially we are created a system that is similar Batocera or Steam OS; with the ability to have compatibility natively with steaming media, media players, etc. in addition a "store" that will allow easier installation of additional software.
+
+
+Example layout
+
+
+
+[Favorites] -- [Emulators] -- [Games] -- [Media] -- [App Store] -- [Settings]
+
+Favorites would be a section where any applications can be saved for easier access
+
+
+[Emulators]
+     |
+     |
+     |
+    \ /
+     V
+[ Console Emulator Choices ]   ----> [NES]   ----> [N64]   ---->    ----> [Etc. Etc.]
+
+                                      |
+                                      |
+                                      |
+                                     \ /
+                                      V
+                                   [ GAMES ]  --->
+                                                   |
+                                                   | 
+                                                   |
+                                                  \ / 
+                                                   V
+                                                 [Game Launched]
+
+
+
+Repeats with Media, Streaming Apps/Options, App Store, Settings
+
+Since we are running on a Linux system, we need to have support for sudo-level access with password/pin input capability. This can be through an on screen keyboard, or buy using buttons combinations similar to how Xbox restricts system installations.
+
+
+
+The Linux OS that will be used, for now, will be based on Ubuntu
