@@ -107,7 +107,7 @@ Long game lists use a **grid with A–Z jump** rather than a single horizontal r
 | M | Name | Contents | Owner(s) | Gate |
 |---|---|---|---|---|
 | **M0** | Walking skeleton | CMake + `qt_add_qml_module`; `--windowed`/`--fullscreen` flags; hard-coded category tiles; keyboard navigation and focus ring; launch a test app with QProcess and return focus on exit | gui-expert | code-reviewer |
-| **M1** | Navigation framework | Tile, TileRow, TileGrid, NavStack with focus memory, PromptBar, mouse support, Theme with resolution-independent scaling and safe area, SoundFx | gui-expert | code-reviewer |
+| **M1** | Navigation framework | Tile, TileRow, TileGrid, NavStack with focus memory, PromptBar, mouse support, Theme with resolution-independent scaling and safe area, SoundFx. **Carried over from the M0 review:** (a) move InputMap into a C++ `InputRouter` singleton that owns the key table, repeat policy and blocked/mute state, with a thread-safe queued entry point for SDL in M3; (b) send actions to the top NavStack screen so unhandled actions bubble up, and make mouse clicks activate their own tile; (c) save focus as a path {screen,row,index}; (d) a static `mightyos_core` library shared by the app and the tests; (e) Qt Quick Test coverage for input rules and Launcher crash tests; (f) refresh the clock when the window becomes active; (g) a shared JS icon table | gui-expert | code-reviewer |
 | **M2** | Data layer | AppRegistry (`.desktop` files and manifests), favorites (X to toggle, reorder), async artwork and cache, navstate persistence | general-purpose + gui-expert | code-reviewer |
 | **M3** | Gamepad | SDL3 thread, key repeat, hotplug, button glyphs (Xbox/PS/Nintendo), rumble. **Needs real hardware** (or usbipd-win on WSL) | gui-expert | code-reviewer |
 | **M4** | Emulators | System definitions, RomScanner + SQLite, game grid, RetroArch and standalone emulator launching, per-game core override | general-purpose + gui-expert | code-reviewer + security-expert (launch hygiene) |
@@ -142,5 +142,6 @@ M0 to M2 can be built entirely on the WSL dev box. M3 and later need a real x86 
 - [x] Vision captured (`guide.txt`)
 - [x] Core decisions D1–D10
 - [x] GUI and security design reviews
-- [ ] Dev toolchain installed on the WSL box
-- [ ] M0 walking skeleton
+- [x] Dev toolchain installed on the WSL box (Qt 6.10.2, CMake 4.2, g++ 15, SDL3 3.4.2)
+- [x] M0 walking skeleton, reviewed. Fixed: test app is bundled-only; launch-state guard; child process hygiene (own session, PDEATHSIG, clean fds/signals, group terminate); edge-bump repeat; "crashed" toast; TZ passthrough
+- [ ] M1 navigation framework
