@@ -2,14 +2,15 @@ import QtQuick
 
 // The one focus indicator. It tracks `target` (an item in the same
 // coordinate space, e.g. a view's current delegate), glides between targets
-// in Theme.animFast and scales with the target. `offsetX` carries the edge
-// "bump". Geometry is bound here rather than left to ListView's highlight
+// in Theme.animFast and scales with the target. `offsetX`/`offsetY` carry
+// the edge "bump". Geometry is bound here rather than left to ListView's highlight
 // sizing, which stretches the highlight to the full view height.
 Item {
     id: ring
 
     property Item target: null
     property real offsetX: 0
+    property real offsetY: 0
     property bool shown: true
 
     z: 10
@@ -28,7 +29,7 @@ Item {
         enabled: ring.visible
         NumberAnimation { duration: Theme.animFast; easing.type: Easing.OutCubic }
     }
-    transform: Translate { x: ring.offsetX }
+    transform: Translate { x: ring.offsetX; y: ring.offsetY }
 
     Rectangle {
         anchors.fill: parent

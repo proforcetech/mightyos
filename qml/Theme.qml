@@ -41,8 +41,17 @@ QtObject {
     readonly property int radius:    px(20)
     readonly property int tileSize:  px(240)
     readonly property int tileIconSize: px(104)
-    readonly property int placeholderWidth:  px(300)
-    readonly property int placeholderHeight: px(170)
+    // Game covers in grids (3:4 box art; art arrives in M2/M4).
+    readonly property int posterWidth:  px(200)
+    readonly property int posterHeight: px(266)
+    readonly property int posterIconSize: px(72)
+    // Category bar "pills".
+    readonly property int pillHeight: px(76)
+    readonly property int pillIconSize: px(40)
+    readonly property int pillPadding: px(28)
+    // Context menu / dialog panels.
+    readonly property int panelWidth: px(720)
+    readonly property int menuItemHeight: px(76)
 
     // --- Focus ------------------------------------------------------------
     readonly property real focusScale: 1.08
@@ -50,11 +59,15 @@ QtObject {
     readonly property int focusGap:    Math.max(2, px(6))
     readonly property int bumpDistance: px(14)
     // Room a focused tile + ring needs beyond the tile's own bounds.
-    readonly property int focusOverflow: Math.ceil(tileSize * (focusScale - 1) / 2) + focusGap + focusBorder
+    function overflowFor(size) { return Math.ceil(size * (focusScale - 1) / 2) + focusGap + focusBorder }
+    readonly property int focusOverflow: overflowFor(tileSize)
 
     // --- Motion (ms) ------------------------------------------------------
     readonly property int animFast:   120
     readonly property int animNormal: 200
+    readonly property int animScreen: 140          // NavStack push/pop (<= 150)
+    readonly property int screenShift: px(64)      // push/pop slide distance
     readonly property int inputMuteAfterExit: 300
     readonly property int toastDuration: 2500
+    readonly property int cursorHideDelay: 3000
 }

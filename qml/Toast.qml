@@ -5,6 +5,8 @@ Rectangle {
     id: toast
 
     property bool error: false
+    readonly property alias message: label.text
+    readonly property bool shown: state === "shown"
 
     function show(message, isError) {
         label.text = message

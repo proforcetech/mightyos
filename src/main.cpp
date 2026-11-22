@@ -2,9 +2,17 @@
 #include <QCommandLineParser>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QWindow>
+#include <QtQml/qqmlextensionplugin.h>
+
+#include "inputrouter.h"
 
 #include <cstdio>
 #include <cstdlib>
+
+// Both QML modules are static libraries (shared with the tests).
+Q_IMPORT_QML_PLUGIN(MightyOS_CorePlugin)
+Q_IMPORT_QML_PLUGIN(MightyOS_UIPlugin)
 
 int main(int argc, char *argv[])
 {
@@ -40,6 +48,18 @@ int main(int argc, char *argv[])
                      [] { QCoreApplication::exit(EXIT_FAILURE); }, Qt::QueuedConnection);
     engine.setInitialProperties({ { QStringLiteral("startFullscreen"), fullscreen } });
     engine.loadFromModule("MightyOS.UI", "Main");
+    if (engine.rootObjects().isEmpty())
+        return EXIT_FAILURE;
+
+    // All keyboard and mouse-button input enters through InputRouter, which
+    // filters the window's events before Qt Quick delivers them.
+    auto *window = qobject_cast<QWindow *>(engine.rootObjects().constFirst());
+    auto *router = engine.singletonInstance<InputRouter *>("MightyOS.Core", "InputRouter");
+    if (!window || !router) {
+        std::fputs("mightyos: root window or InputRouter missing\n", stderr);
+        return EXIT_FAILURE;
+    }
+    router->attachToWindow(window);
 
     return QGuiApplication::exec();
 }

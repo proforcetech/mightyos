@@ -1,3 +1,4 @@
+#include "envguard.h"
 #include "launcher.h"
 
 #include <QSignalSpy>
@@ -13,6 +14,7 @@ private slots:
     void resolveProgramRejectsRelativePaths();
     void launchAndExit();
     void exitCodeIsReported();
+    void crashIsReported();
     void childSeesFilteredEnvironment();
     void missingProgramFails();
     void secondLaunchWhileRunningFails();
@@ -121,10 +123,26 @@ void TestLauncher::exitCodeIsReported()
     QCOMPARE(exited.first().at(1).toInt(), 3);
 }
 
+void TestLauncher::crashIsReported()
+{
+    Launcher launcher;
+    QSignalSpy exited(&launcher, &Launcher::exited);
+    QSignalSpy failed(&launcher, &Launcher::failed);
+    // --crash calls abort() (with core dumps disabled): CrashExit -> -1.
+    QVERIFY(launcher.launch(QStringLiteral("test:crash"), {
+        kTestApp, QStringLiteral("-platform"), QStringLiteral("offscreen"), QStringLiteral("--crash")
+    }));
+    QVERIFY(exited.wait(10000));
+    QCOMPARE(exited.first().at(0).toString(), QStringLiteral("test:crash"));
+    QCOMPARE(exited.first().at(1).toInt(), -1);
+    QCOMPARE(failed.count(), 0);
+    QVERIFY(!launcher.isRunning());
+}
+
 void TestLauncher::childSeesFilteredEnvironment()
 {
-    qputenv("LD_LIBRARY_PATH", "/nonexistent-mightyos-test");
-    qputenv("MIGHTYOS_TEST_SECRET", "hunter2");
+    const EnvGuard ldPath("LD_LIBRARY_PATH", "/nonexistent-mightyos-test");
+    const EnvGuard secret("MIGHTYOS_TEST_SECRET", "hunter2");
 
     Launcher launcher;
     QSignalSpy exited(&launcher, &Launcher::exited);
@@ -135,9 +153,6 @@ void TestLauncher::childSeesFilteredEnvironment()
     }));
     QVERIFY(exited.wait(5000));
     QCOMPARE(exited.first().at(1).toInt(), 0);
-
-    qunsetenv("LD_LIBRARY_PATH");
-    qunsetenv("MIGHTYOS_TEST_SECRET");
 }
 
 void TestLauncher::missingProgramFails()
