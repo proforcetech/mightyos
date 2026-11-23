@@ -1,6 +1,9 @@
 import QtQuick
+import MightyOS.Core
 
 // Transient, non-focusable notification. show() replaces any current toast.
+// Errors play the Error sound, which also rumbles the controller
+// (Feedback::wire, InputRouter.rumble policy).
 Rectangle {
     id: toast
 
@@ -11,6 +14,8 @@ Rectangle {
     function show(message, isError) {
         label.text = message
         error = !!isError
+        if (error)
+            SoundFx.play(SoundFx.Error)
         state = "shown"
         hideTimer.restart()
     }
@@ -25,6 +30,7 @@ Rectangle {
     visible: opacity > 0
 
     Text {
+        textFormat: Text.PlainText
         id: label
         anchors.centerIn: parent
         width: Math.min(implicitWidth, toast.width - 2 * Theme.spacingL)

@@ -101,6 +101,7 @@ Item {
             spacing: Theme.px(4)
 
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: tile.poster ? Text.Wrap : Text.NoWrap
@@ -113,6 +114,7 @@ Item {
                 font.weight: tile.focused ? Font.DemiBold : Font.Normal
             }
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 visible: text.length > 0 && !tile._compact
                 horizontalAlignment: Text.AlignHCenter
@@ -153,6 +155,7 @@ Item {
         radius: height / 2
         color: tile.tint
         Text {
+            textFormat: Text.PlainText
             id: badgeText
             anchors.centerIn: parent
             text: tile.badge

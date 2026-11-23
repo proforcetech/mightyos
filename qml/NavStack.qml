@@ -104,6 +104,17 @@ Item {
         return true
     }
 
+    // Guide (Main.goHome): back to the root screen, Favorites category.
+    // Returns false if there is no stack yet.
+    function goHome(): bool {
+        if (depth === 0)
+            return false
+        popTo(1)
+        rootScreen.goHome()
+        persist()
+        return true
+    }
+
     function handleAction(action: int, arg: string): bool {
         const screen = current
         if (!screen)

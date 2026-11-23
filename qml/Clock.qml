@@ -3,6 +3,7 @@ import QtQuick
 // Locale short time. Wakes once per minute (aligned to the minute boundary)
 // rather than every second, to keep idle cost near zero.
 Text {
+    textFormat: Text.PlainText
     id: clock
 
     color: Theme.text

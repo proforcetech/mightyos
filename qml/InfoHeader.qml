@@ -11,6 +11,7 @@ Column {
     spacing: Theme.spacingS
 
     Text {
+        textFormat: Text.PlainText
         width: header.width
         text: header.heading
         color: Theme.text
@@ -20,6 +21,7 @@ Column {
         elide: Text.ElideRight
     }
     Text {
+        textFormat: Text.PlainText
         width: header.width
         text: header.detail
         color: Theme.textDim

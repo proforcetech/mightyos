@@ -32,6 +32,13 @@ if(CMAKE_GENERATOR MATCHES "Ninja")
 endif()
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Qml Quick Concurrent)
+# Development entry points that feed input from outside the session
+# (--fake-cec for mightyos and mightyos-inputtest). ON while MightyOS is in
+# development; packaged builds (M6) must set it OFF.
+option(MIGHTYOS_DEV_TOOLS "Build development-only input options (--fake-cec)" ON)
+
+# Gamepads (PLAN D6). Ubuntu: libsdl3-dev.
+find_package(SDL3 3.2 REQUIRED CONFIG COMPONENTS SDL3-shared)
 qt_standard_project_setup(REQUIRES 6.8)
 # Each QML module gets <dir>/MightyOS/<Name>, which qmllint and qmlcachegen
 # use as their import path.
@@ -81,6 +88,14 @@ qt_add_qml_module(mightyos_core
         src/profileservice.h src/profileservice.cpp
         src/favorites.h src/favorites.cpp
         src/history.h src/history.cpp
+        src/settings.h src/settings.cpp
+        src/feedback.h src/feedback.cpp
+        src/textsanitize.h src/textsanitize.cpp
+        src/padinput.h src/padinput.cpp
+        src/padhub.h src/padhub.cpp
+        src/gamepadservice.h src/gamepadservice.cpp
+        src/cecinput.h src/cecinput.cpp
+        src/cecservice.h src/cecservice.cpp
 )
 # Mock library (systems + games) until the real library arrives in M4.
 qt_add_resources(mightyos_core "mightyos_mockdata"
@@ -89,6 +104,7 @@ qt_add_resources(mightyos_core "mightyos_mockdata"
     FILES data/mock/library.json)
 target_include_directories(mightyos_core PUBLIC src)
 target_link_libraries(mightyos_core PUBLIC Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Concurrent)
+target_link_libraries(mightyos_core PRIVATE SDL3::SDL3)
 mightyos_set_warnings(mightyos_core)
 
 # ---------------------------------------------------------------------------
@@ -118,6 +134,8 @@ qt_add_qml_module(mightyos_ui
         qml/CategoryBar.qml
         qml/InfoHeader.qml
         qml/PromptBar.qml
+        qml/ButtonGlyph.qml
+        qml/Glyphs.js
         qml/Breadcrumb.qml
         qml/ContextMenu.qml
         qml/Dialog.qml
@@ -147,7 +165,8 @@ qt_add_executable(mightyos
     src/main.cpp
 )
 target_compile_definitions(mightyos PRIVATE
-    MIGHTYOS_VERSION="${PROJECT_VERSION}")
+    MIGHTYOS_VERSION="${PROJECT_VERSION}"
+    $<$<BOOL:${MIGHTYOS_DEV_TOOLS}>:MIGHTYOS_DEV_TOOLS>)
 target_link_libraries(mightyos PRIVATE
     Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick
     mightyos_core mightyos_coreplugin
@@ -171,6 +190,17 @@ qt_add_qml_module(mightyos-testapp
 
 target_link_libraries(mightyos-testapp PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick)
 mightyos_set_warnings(mightyos-testapp)
+
+# ---------------------------------------------------------------------------
+# mightyos-inputtest: CLI, no GUI. Prints controllers and the actions they
+# produce (hands-on testing over SSH).
+# ---------------------------------------------------------------------------
+qt_add_executable(mightyos-inputtest
+    tools/inputtest.cpp
+)
+target_link_libraries(mightyos-inputtest PRIVATE Qt6::Core mightyos_core)
+target_compile_definitions(mightyos-inputtest PRIVATE $<$<BOOL:${MIGHTYOS_DEV_TOOLS}>:MIGHTYOS_DEV_TOOLS>)
+mightyos_set_warnings(mightyos-inputtest)
 
 
 # ---------------------------------------------------------------------------
@@ -220,6 +250,11 @@ if(MIGHTYOS_BUILD_TESTS)
     mightyos_add_test(tst_profiles)
     mightyos_add_test(tst_favorites)
     mightyos_add_test(tst_artwork LIBS Qt6::Quick)
+    mightyos_add_test(tst_padinput)
+    mightyos_add_test(tst_padhub)
+    mightyos_add_test(tst_gamepadservice LIBS SDL3::SDL3)
+    mightyos_add_test(tst_cec)
+    mightyos_add_test(tst_settings)
 
     # Qt Quick Test: components, NavStack and the whole Main window
     # (tests/qml/tst_*.qml). tst_main launches the test app.

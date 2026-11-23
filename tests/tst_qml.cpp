@@ -2,11 +2,13 @@
 // The MightyOS.Core and MightyOS.UI modules are static libraries, linked
 // in and imported here exactly as in the app.
 #include "artworkprovider.h"
+#include "feedback.h"
 
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QtQml/qqmlextensionplugin.h>
@@ -74,6 +76,12 @@ public slots:
                                                   QStringLiteral(MIGHTYOS_TESTAPP_PATH));
         engine->rootContext()->setContextProperty(QStringLiteral("testFiles"), new TestFiles(engine));
         ArtworkProvider::install(engine);
+        // Haptics as in main(): Bump/Error sounds ask for a rumble. The
+        // module has to be imported once before its singletons exist.
+        QQmlComponent warmup(engine);
+        warmup.setData("import QtQml\nimport MightyOS.Core\nQtObject {}", QUrl());
+        delete warmup.create();
+        Feedback::wire(engine);
     }
 };
 

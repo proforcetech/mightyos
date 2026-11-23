@@ -44,6 +44,12 @@ Item {
     readonly property string focusedAcceptLabel: acceptLabel(focusedItem)
     // Whether the focused item can be a favorite (X / F), for prompts.
     readonly property bool focusedCanFavorite: canFavorite(focusedItem)
+    // PLAN D18: false on screens the TV remote must not operate (secure
+    // screens in M8); while such a screen is on top the remote can only go
+    // Back / Home. secureEntry additionally silences action logging (PIN
+    // pad, admin keyboard). Main binds InputRouter to both.
+    property bool acceptsRemote: true
+    property bool secureEntry: false
     // NavStack's connections to this screen (so they can be cut when the
     // screen leaves the stack). Not for screens to touch.
     property var _stackConnections: null
@@ -78,6 +84,9 @@ Item {
     }
     // Mouse wheel over empty screen space.
     function wheel(steps: int) {
+    }
+    // Guide on the root screen (Home overrides it).
+    function goHome() {
     }
     // True if the focused tile is shown as part of the favorites list
     // (Home > Favorites row, the Favorites grid): enables reordering.
@@ -136,11 +145,15 @@ Item {
         case "allapps":
             openRequested("apps", {})
             break
+        case "controllers":
+            _showControllers()
+            break
         case "power":
             dialogRequested({
                 title: qsTr("Power off?"),
                 message: qsTr("Power controls arrive in M8. This dialog shows the safe default: "
                               + "focus starts on Cancel, and Back also cancels."),
+                acceptsRemote: false,
                 buttons: [
                     { id: "cancel", label: qsTr("Cancel") },
                     { id: "poweroff", label: qsTr("Power off"), destructive: true }
@@ -158,6 +171,59 @@ Item {
             break
         }
         }
+    }
+
+    // Settings > Controllers (until the full screen in M8): what is
+    // connected, the vibration toggle (Settings.rumble) and the TV remote
+    // trust level (Settings.tvRemote). The remote can't answer this dialog
+    // (it must not raise its own trust level).
+    function _remoteModeText(mode: string): string {
+        return mode === "off" ? qsTr("off")
+             : mode === "full" ? qsTr("full control")
+             : qsTr("navigation only (move, OK, Back, Home)")
+    }
+
+    function _showControllers() {
+        const names = InputRouter.controllers
+        const connected = names.length > 0
+            ? qsTr("Connected: %1.").arg(names.join(", "))
+            : qsTr("No controller or TV remote connected.")
+        const rumble = Settings.rumble
+        const remote = Settings.tvRemote
+        const nextRemote = remote === "navigation" ? "full" : remote === "full" ? "off" : "navigation"
+        dialogRequested({
+            title: qsTr("Controllers"),
+            message: connected + "\n"
+                + (rumble ? qsTr("Vibration is on: a short pulse at the end of a row and on errors.")
+                          : qsTr("Vibration is off."))
+                + "\n" + qsTr("TV remote: %1.").arg(_remoteModeText(remote)),
+            acceptsRemote: false,
+            buttons: [
+                { id: "close", label: qsTr("Close") },
+                { id: "rumble", label: rumble ? qsTr("Vibration off") : qsTr("Vibration on") },
+                { id: "remote", label: qsTr("TV remote: %1").arg(
+                      nextRemote === "off" ? qsTr("off") : nextRemote === "full" ? qsTr("full") : qsTr("navigation")) }
+            ],
+            onFinished: (id) => {
+                if (id === "rumble") {
+                    Settings.rumble = !rumble
+                    if (Settings.rumble === rumble) {
+                        screen.toastRequested(qsTr("Could not save the setting"), true)
+                        return
+                    }
+                    screen.toastRequested(Settings.rumble ? qsTr("Vibration on") : qsTr("Vibration off"), false)
+                    if (Settings.rumble)
+                        InputRouter.rumble(InputRouter.Bump)   // feel it
+                } else if (id === "remote") {
+                    Settings.tvRemote = nextRemote
+                    if (Settings.tvRemote !== nextRemote) {
+                        screen.toastRequested(qsTr("Could not save the setting"), true)
+                        return
+                    }
+                    screen.toastRequested(qsTr("TV remote: %1").arg(_remoteModeText(nextRemote)), false)
+                }
+            }
+        })
     }
 
     // A favorite whose target is gone: offer to remove it (Keep is the

@@ -93,6 +93,7 @@ Item {
         const id = item.key
         const name = item.title
         dialogRequested({
+            acceptsRemote: false,
             title: qsTr("Delete %1?").arg(name),
             message: qsTr("Its favorites, history and saved position are deleted too. This can't be undone."),
             buttons: [
@@ -196,6 +197,7 @@ Item {
         spacing: Theme.spacingL
 
         Text {
+            textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
             text: qsTr("Who's playing?")
             color: Theme.text
@@ -221,6 +223,7 @@ Item {
         }
 
         Text {
+            textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
             width: Math.min(implicitWidth, parent.width)
             horizontalAlignment: Text.AlignHCenter

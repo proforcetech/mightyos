@@ -8,8 +8,12 @@ import MightyOS.Core
 // choice is always the default and the back action.
 //
 // show({ title, message, buttons: [{ id, label, destructive? }],
-//        onFinished: function(id) {} })
+//        acceptsRemote: false?, onFinished: function(id) {} })
 // The callback (and the finished signal) receive the chosen button id.
+// acceptsRemote: false marks a confirmation the TV remote must not answer
+// (PLAN D18: destructive or trust-changing choices): while it is open the
+// remote can only cancel it (Back / Home); Main binds
+// InputRouter.acceptRemote to it.
 Item {
     id: dialog
 
@@ -17,6 +21,7 @@ Item {
     property string title
     property string message
     property var buttons: []
+    property bool acceptsRemote: true
     property int currentIndex: 0
     property real bumpX: 0
 
@@ -43,6 +48,7 @@ Item {
         buttons = spec.buttons && spec.buttons.length > 0
             ? spec.buttons : [{ id: "ok", label: qsTr("OK") }]
         _onFinished = spec.onFinished ?? null
+        acceptsRemote = spec.acceptsRemote !== false
         currentIndex = Math.max(0, cancelIndex)
         open = true
     }
@@ -121,6 +127,7 @@ Item {
             spacing: Theme.spacingM
 
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: dialog.title
                 wrapMode: Text.Wrap
@@ -130,6 +137,7 @@ Item {
                 font.weight: Font.Bold
             }
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: dialog.message
                 visible: text.length > 0
@@ -161,6 +169,7 @@ Item {
                         transform: Translate { x: button.current ? dialog.bumpX : 0 }
 
                         Text {
+                            textFormat: Text.PlainText
                             id: label
                             anchors.centerIn: parent
                             text: button.modelData.label

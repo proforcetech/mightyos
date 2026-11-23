@@ -13,19 +13,30 @@
 
 namespace JsonFile {
 
-std::optional<QByteArray> readRegularFile(const QString &path, qint64 limit, bool followSymlinks)
+std::optional<QByteArray> readRegularFile(const QString &path, qint64 limit, bool followSymlinks,
+                                          int *error)
 {
+    const auto fail = [error](int code) -> std::optional<QByteArray> {
+        if (error)
+            *error = code;
+        return std::nullopt;
+    };
     const QByteArray native = QFile::encodeName(path);
     int flags = O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_NOCTTY;
     if (!followSymlinks)
         flags |= O_NOFOLLOW;
     const int fd = ::open(native.constData(), flags);
     if (fd < 0)
-        return std::nullopt;
+        return fail(errno);
     struct stat st {};
-    if (::fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) || st.st_size > limit) {
+    if (::fstat(fd, &st) != 0) {
+        const int code = errno;
         ::close(fd);
-        return std::nullopt;
+        return fail(code);
+    }
+    if (!S_ISREG(st.st_mode) || st.st_size > limit) {
+        ::close(fd);
+        return fail(S_ISREG(st.st_mode) ? EFBIG : EINVAL);
     }
     // One byte more than fstat() promised, to notice a file that grows.
     const qint64 expected = st.st_size;
@@ -36,13 +47,18 @@ std::optional<QByteArray> readRegularFile(const QString &path, qint64 limit, boo
         const ssize_t n = ::read(fd, data.data() + total, static_cast<size_t>(expected + 1 - total));
         if (n < 0 && errno == EINTR)
             continue;
-        if (n <= 0)
+        if (n < 0) {
+            const int code = errno;   // EIO: no partial data
+            ::close(fd);
+            return fail(code);
+        }
+        if (n == 0)
             break;
         total += n;
     }
     ::close(fd);
     if (total > expected)
-        return std::nullopt;   // changed while we read
+        return fail(EAGAIN);   // changed while we read
     data.truncate(total);
     return data;
 }

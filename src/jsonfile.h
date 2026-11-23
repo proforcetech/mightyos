@@ -15,7 +15,11 @@ enum class ReadStatus { Ok, Missing, Invalid };
 // FIFO planted under the name can't hang the caller, fstat() must say
 // regular file, the read is capped. Symlinks are followed only if
 // `followSymlinks` (application dirs: Flatpak exports are symlinks).
-std::optional<QByteArray> readRegularFile(const QString &path, qint64 limit, bool followSymlinks);
+// On failure `*error` (if given) is the errno of open()/read() (ENOENT
+// for a missing file, EACCES, EIO, ...), EINVAL for "not a regular file",
+// EFBIG for over `limit`, EAGAIN for "changed while reading".
+std::optional<QByteArray> readRegularFile(const QString &path, qint64 limit, bool followSymlinks,
+                                          int *error = nullptr);
 
 // Renames `path` to `path + suffix` (replacing an older one), so an
 // unusable or newer-format file is kept for the user instead of being

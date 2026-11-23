@@ -43,7 +43,7 @@ const sections = {
         { key: "settings:display",     title: qsTr("Display"),     icon: "display",   tint: "#a0aec0" },
         { key: "settings:audio",       title: qsTr("Audio"),       icon: "audio",     tint: "#a0aec0" },
         { key: "settings:network",     title: qsTr("Network"),     icon: "network",   tint: "#a0aec0" },
-        { key: "settings:controllers", title: qsTr("Controllers"), icon: "emulators", tint: "#a0aec0" },
+        { key: "settings:controllers", title: qsTr("Controllers"), icon: "emulators", tint: "#a0aec0", kind: "controllers" },
         { key: "settings:storage",     title: qsTr("Storage"),     icon: "folder",    tint: "#a0aec0" },
         { key: "settings:power",       title: qsTr("Power"),       icon: "power",     tint: "#ff6b6b", kind: "power" }
     ]

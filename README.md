@@ -2,16 +2,19 @@
 
 A console-style launcher for Ubuntu with large tiles, built for a TV
 ("10-foot") setup and for keyboard, mouse or gamepad. See `PLAN.md` for the
-full plan. This is milestone **M2, data layer & profiles**: real installed
-apps (`.desktop` files and manifests), profiles with a picker, per-profile
-favorites and history, and offline artwork. Systems and games are still a
-mock library until M4.
+full plan. This is milestone **M3, gamepad & TV remote**: any number of
+SDL3 gamepads (hotplug, repeat, rumble, Xbox / PlayStation / Nintendo
+button glyphs), the Guide button, and an HDMI-CEC TV remote, on top of M2's
+installed apps, profiles, favorites and artwork. Systems and games are
+still a mock library until M4.
 
 ## Build
 
-Requirements: Qt >= 6.8 (Core, Gui, Qml, Quick, Concurrent, Test, QuickTest), CMake >= 3.21,
-Ninja and a C++20 compiler. At run time the Qt SVG image plugin is needed
-for the icons (Ubuntu: `qt6-svg-plugins`).
+Requirements: Qt >= 6.8 (Core, Gui, Qml, Quick, Concurrent, Test, QuickTest), SDL >= 3.2
+(Ubuntu: `libsdl3-dev`), CMake >= 3.21, Ninja and a C++20 compiler. At run
+time the Qt SVG image plugin is needed for the icons and button glyphs
+(Ubuntu: `qt6-svg-plugins`). HDMI-CEC uses the kernel headers
+(`linux/cec.h`) only; libcec is not used.
 
 ```sh
 cmake -S . -B build -G Ninja
@@ -21,7 +24,11 @@ cmake --build build
 Ninja compile jobs are capped by RAM (about one job per GB, see
 `MIGHTYOS_COMPILE_JOBS`), because Qt's AOT-compiled QML is memory-hungry.
 Override the cap with `-DMIGHTYOS_COMPILE_JOBS=N`. Turn the tests off with
-`-DMIGHTYOS_BUILD_TESTS=OFF`.
+`-DMIGHTYOS_BUILD_TESTS=OFF`. `-DMIGHTYOS_DEV_TOOLS=OFF` removes the
+development-only `--fake-cec` options (input from stdin or a FIFO); it is
+ON while MightyOS is in development and **must be OFF in packaged builds**
+(M6). Even when built in, `mightyos` refuses `--fake-cec` inside the
+MightyOS session (`XDG_SESSION_DESKTOP=mightyos`).
 
 ## Run
 
@@ -30,6 +37,9 @@ Override the cap with `-DMIGHTYOS_COMPILE_JOBS=N`. Turn the tests off with
 ./build/mightyos --windowed    # same, explicit
 ./build/mightyos --fullscreen
 QT_QPA_PLATFORM=offscreen ./build/mightyos   # headless smoke test
+./build/mightyos --no-gamepad --no-cec       # keyboard and mouse only
+./build/mightyos --fake-cec fifo             # fake TV remote, see "TV remote"
+./build/mightyos-inputtest --seconds 30      # no GUI: print pads and actions
 ```
 
 The default switches to fullscreen in M6, when MightyOS becomes its own
@@ -41,6 +51,8 @@ Each profile reopens on the screen and tile it left.
 
 | Path | What |
 |---|---|
+| `$XDG_CONFIG_HOME/mightyos/settings.json` | global settings: `{ "version": 1, "rumble": true, "tvRemote": "navigation" }` |
+| `$XDG_CONFIG_HOME/mightyos/gamecontrollerdb.txt` | optional extra SDL controller mappings (regular file, max 2 MiB) |
 | `$XDG_CONFIG_HOME/mightyos/profiles.json` | profiles (id, name, avatar, colour, kind, createdAt, lastUsed) |
 | `$XDG_CONFIG_HOME/mightyos/profiles/<id>/favorites.json` | that profile's favorites, in order |
 | `$XDG_STATE_HOME/mightyos/profiles/<id>/navstate.json` | focus path (delete it to start at Home) |
@@ -54,8 +66,11 @@ The defaults are `~/.config`, `~/.local/state`, `~/.cache` and
 malformed files are ignored, and a corrupt `profiles.json` is moved aside to
 `profiles.json.corrupt`; an unreadable `favorites.json`/`history.json`
 becomes `.corrupt`, one with an unknown (e.g. newer) format version becomes
-`.unsupported`, so the next write never destroys it. The M1 `navstate.json` becomes the first profile's
-on the first M2 start.
+`.unsupported`, so the next write never destroys it. `settings.json` is
+moved aside (`.corrupt`) only when it doesn't parse; one from a newer
+MightyOS is read (known keys) but never written, and one that can't be
+read (permissions, I/O error) is left alone and not overwritten. The M1
+`navstate.json` becomes the first profile's on the first M2 start.
 
 ### Apps
 
@@ -105,11 +120,14 @@ name or an absolute path. Files over 64 KiB, unknown versions, invalid ids
 and programs that aren't found are ignored.
 
 Logging: categories `mightyos.apps`, `.profiles`, `.favorites`,
-`.history`, `.artwork` and `.library` print warnings only by default. To see
-what the registry found and why entries were skipped:
+`.history`, `.artwork`, `.library` and `.settings` print warnings only by
+default; `mightyos.gamepad`, `.cec` and `.input` also print info (a
+controller or remote connecting, Guide held during a game). To see what the
+registry found and why entries were skipped, or every input action:
 
 ```sh
 QT_LOGGING_RULES="mightyos.apps.debug=true;mightyos.apps.info=true" ./build/mightyos
+QT_LOGGING_RULES="mightyos.input.debug=true" ./build/mightyos
 ```
 
 Logs contain ids and counts, never command lines.
@@ -124,15 +142,20 @@ cmake --build build --target all_qmllint      # QML lint
 | Test | Covers |
 |---|---|
 | `tst_launcher` | environment allowlist, launch/exit/exit code, crash (`--crash` -> -1), launch guards |
-| `tst_inputrouter` | key table, repeat policy, mute window, blocked, cross-thread `postAction`, mouse back button, text-field passthrough, cursor auto-hide |
+| `tst_inputrouter` | key table (incl. Ctrl+Home / HomePage = Guide), repeat policy, mute window, blocked, cross-thread `postAction` and its pending counter, `guideHeld` bypassing blocked/mute, pad style and device notices, rumble policy (bump once per hold), remote trust levels and restricted contexts, secure entry logs nothing (captured log), device-name sanitising and terminal escaping, mouse back button, text-field passthrough, cursor auto-hide |
 | `tst_navstate` | save/load round trip, corrupt and stale files, path truncation, profile paths, debounce/flush |
 | `tst_tilelistmodel` | model contract (roles, `indexOfKey`/`firstIndexForLetter` after reset, insert, remove, move; `get`; in-place updates), mock Library ids and structure |
 | `tst_desktopentry` | `Exec=` parsing per the spec (quotes, escapes, `%f %F %u %U %i %c %k %%`, deprecated codes, rejected shell syntax and malformed values), file parsing, locales, lists |
 | `tst_appregistry` | desktop-file-id precedence, Hidden/NoDisplay/TryExec/OnlyShowIn/NotShowIn/Terminal, subdirectory ids, Flatpak ids, icon validation, oversized/broken files, manifests and their validation, async scan, watcher re-scan (incl. a dir created later), no argv in logs |
 | `tst_profiles` | first run, create/rename/appearance/kind, delete (with its data) and last-profile protection, startup rule, last-used ordering, invalid ids in the file, corrupt file, failed atomic write, M1 navstate migration |
 | `tst_favorites` | toggle, saved order, move, unavailable targets (and their recovery), per-profile isolation, file validation; history counts, order, per profile, cap |
+| `tst_padinput` | positional button mapping, stick deadzone/hysteresis and dominant axis (1.3x margin; a jittering diagonal never flips), token bucket, trigger hysteresis, repeat timing (350 ms, 90 ms accelerating to 40 ms) with a fake clock, no burst after a stall, D-pad + stick without double steps, Guide press/hold, latching on app start/exit, InputGate: only `guideHeld` while an app runs, Guide = Home, coalescing of queued repeats (a stalled GUI thread doesn't overshoot) |
+| `tst_gamepadservice` | SDL thread start/stop/restart without hangs (no controller needed), join on `aboutToQuit` and in the destructor, rumble refused while an app runs, glyph style from SDL's gamepad types, Steam virtual pad id, user mapping file (loaded; oversized and FIFO ignored without hanging) |
+| `tst_padhub` | PadHub with pipes as device nodes: wake-up fd indexing across several pads and removals, the control eventfd, POLLHUP closes the fd and falls back to SDL's wait until reopened, no fd / no eventfd means SDL's wait, hidraw nodes, latching on app start and exit (and pads connected while running), the service-thread rumble target, glyph style posted before each pad's action, keyboard-like evdev nodes refused |
+| `tst_cec` | CEC UI command mapping, key names, key message parsing (broadcast key frames dropped), follower replies (OSD name, power, menu, deck status, Feature Abort for unknown directed opcodes, active source only after `<Set Stream Path>` to us, nothing for broadcasts), remote repeat without acceleration, lost release stops scrolling within ~0.5 s, late refresh resumes, Root Menu, latch, the fake backend end to end into InputRouter on a fake clock (deterministic), "only Guide while running", press rate limit, removal notices (device lost, stop), FIFO and runtime-dir checks, no device and non-CEC devices refused, libcec stub |
+| `tst_settings` | defaults, rumble and tvRemote round trips, unknown keys kept, parse errors moved aside, newer versions read but never written, unreadable files left alone, failed writes |
 | `tst_artwork` | icon theme lookup (inheritance, best size, SVG preference, pixmaps), decode at the requested size, memory and disk cache hits, re-decode on change, untrusted specs, async responses |
-| `tst_qml` | Qt Quick Test: `tst_tilerow.qml`, `tst_tilegrid.qml` (edges, bump, hover incl. a scrolled row under a resting cursor, click, wheel, paging, letter jump, icon rasterising), `tst_navstack.qml` (routing, bubbling, inert screens during transitions, system stepping, stable prompts, restoring stale paths, per-category positions), `tst_main.qml` (whole window: blocked while running, focus restore, 300 ms mute, crash toast, modal focus trap, Dialog defaults), `tst_profiles.qml` (picker only with 2+ profiles, last used preselected, switching resets and restores the stack, X toggles favorites that appear in order, reordering, unavailable favorites, a launch fills Recent, create/edit/delete in the picker) |
+| `tst_qml` | Qt Quick Test: `tst_tilerow.qml`, `tst_tilegrid.qml` (edges, bump, hover incl. a scrolled row under a resting cursor, click, wheel, paging, letter jump, icon rasterising), `tst_navstack.qml` (routing, bubbling, inert screens during transitions, system stepping, stable prompts, restoring stale paths, per-category positions), `tst_main.qml` (whole window: blocked while running, focus restore, 300 ms mute, crash toast, modal focus trap, Dialog defaults), `tst_profiles.qml` (picker only with 2+ profiles, last used preselected, switching resets and restores the stack, X toggles favorites that appear in order, reordering, unavailable favorites, a launch fills Recent, create/edit/delete in the picker), `tst_promptbar.qml` (glyph style per device: keys, Xbox, PlayStation, Nintendo by position, remote with named colour keys; every glyph has an accessible name; theme-scaled), and in `tst_main.qml` Guide (Home from anywhere, closes menus/dialogs safely, blocked while running, `guideHeld` then a toast after exit), the Controllers vibration and TV remote toggles (not answerable from the remote), remote navigation-only mode and remote-restricted confirmations, rumble on bumps/errors only after gamepad input, connect/disconnect toasts, every Text in the window is plain text, markup in a device name is shown literally |
 
 Tests run with `XDG_CONFIG_HOME`, `XDG_STATE_HOME`, `XDG_DATA_HOME`,
 `XDG_CACHE_HOME` and `XDG_DATA_DIRS` under `build/test-xdg/`, which a ctest
@@ -141,17 +164,34 @@ never see the system's `.desktop` files.
 
 ## Controls
 
-| Action | Keyboard | Mouse | Gamepad (M3) |
-|---|---|---|---|
-| Move focus | Arrow keys | Move the pointer over a tile | D-pad / stick |
-| Select / open / play | Enter, Space | Left click (acts on the clicked tile) | A |
-| Back | Esc, Backspace | Back button, a breadcrumb, the "Back" prompt | B |
-| Options (context menu) | M, Menu | Right click | Start |
-| Favorite (toggle; games, apps, systems) | F | Context menu | X |
-| Search (M7) | `/`, Ctrl+F | | Y |
-| Quick panel (M8) | Q | Click the clock | Select |
-| Previous / next category (in a game grid: previous / next system) | PgUp / PgDn | Click a category | LB / RB |
-| Page up / down in grids | Home / End | Wheel | LT / RT |
+| Action | Keyboard | Mouse | Gamepad | TV remote (HDMI-CEC) |
+|---|---|---|---|---|
+| Move focus | Arrow keys | Move the pointer over a tile | D-pad / left stick | Arrows |
+| Select / open / play | Enter, Space | Left click (acts on the clicked tile) | A (Cross; B on Nintendo) | OK / Select, Enter |
+| Back | Esc, Backspace | Back button, a breadcrumb, the "Back" prompt | B (Circle; A on Nintendo) | Back / Exit |
+| Options (context menu) | M, Menu | Right click | Start / Menu (Options; +) | Red, Contents Menu |
+| Favorite (toggle; games, apps, systems) | F | Context menu | X (Square; Y on Nintendo) | Blue |
+| Search (M7) | `/`, Ctrl+F | | Y (Triangle; X on Nintendo) | Yellow |
+| Quick panel (M8) | Q | Click the clock | Back / View (Create; −) | Green, Setup Menu |
+| Previous / next category (in a game grid: previous / next system) | PgUp / PgDn | Click a category | LB / RB (L1/R1; L/R) | Rewind / Fast forward |
+| Page up / down in grids | Home / End | Wheel | LT / RT (L2/R2; ZL/ZR) | Channel up / down |
+| Home (Favorites) | Ctrl+Home, HomePage key | | Guide (Xbox / PS / Home button) | Home / Root Menu |
+| Guide overlay while a game runs (M6) | | | hold Guide 1 s | Home / Root Menu |
+
+The TV remote column assumes Settings > Controllers > TV remote = **full**.
+The default is **navigation only** (move, OK, Back, Channel, Rewind /
+Fast forward, Home); Options, Favorite, Search and the quick panel are then
+ignored from the remote, and "off" ignores it entirely (PLAN D18). In
+confirmations that change something irreversibly (power off, delete a
+profile), in the Controllers dialog itself and, from M8, in secure screens
+(PIN pad, admin keyboard), the remote can only cancel (Back / Home).
+
+Gamepad buttons are **positional** (SDL3): the bottom face button is always
+Select, whatever its label, so a Nintendo pad selects with B and goes back
+with A, where those buttons physically are. The prompt bar shows the
+buttons of the device used last: key caps, Xbox letters in their colours,
+PlayStation symbols, Nintendo letters, or the remote's OK / Back / colour
+keys.
 
 - Every prompt in the bottom bar can also be clicked.
 - The wheel steps the focus through the row or grid under the pointer, or
@@ -160,15 +200,22 @@ never see the system's `.desktop` files.
 - Hover moves focus only after the pointer really moves. The cursor hides
   after 3 s without mouse movement and on any key press. The first move that
   brings it back doesn't steal focus.
-- Only Navigate auto-repeats. A held Enter can't launch twice.
+- Only Navigate auto-repeats. A held Enter can't launch twice. A held
+  D-pad, stick or remote arrow repeats after 350 ms, every 90 ms,
+  speeding up to every 40 ms. The stick needs half a push (and is released
+  below 40%); the triggers page once per pull.
 - Dialogs and the context menu trap focus. B closes them, and dialogs start
   on (and B picks) the non-destructive button.
 - LB/RB returns to Home and switches category, except in a system's game
   grid, where it steps to the previous/next system (SNES -> N64) in place.
 - Apps launch with the command from their `.desktop` file or manifest.
   Games (mock until M4) launch the bundled test app. While something runs,
-  MightyOS ignores input and shows an overlay. When it closes, focus is back
-  on the same tile and input stays muted for 300 ms. Successful launches
+  MightyOS ignores input and shows an overlay; controllers keep working in
+  the game (MightyOS never grabs them), and only a held Guide reaches
+  MightyOS (it will open the Guide overlay in M6; for now a toast mentions
+  it after the game). When it closes, focus is back on the same tile and
+  input stays muted for 300 ms; whatever was still held in the game does
+  nothing until it is released. Successful launches
   appear in the "Recent" row on Home > Favorites.
 - Favorites: X / F toggles the focused game, app or system (a star shows on
   its tile). Home > Favorites and the Favorites screen show them in your
@@ -182,7 +229,163 @@ never see the system's `.desktop` files.
   can't be deleted). Kids profiles get a badge; their restrictions arrive
   in M8. Settings > All apps lists every app the registry found.
 
+- Controllers: any number, plugged in or out at any time (a toast says so;
+  not for those present at startup). Settings > Controllers lists them and
+  turns vibration on or off (default on): a short, light pulse at the end
+  of a row (once per hold) and on errors, only on the controller used
+  last, only after gamepad input, never while a game runs. It also sets the
+  TV remote's trust level (navigation only / full / off).
+
 Screen mockups and focus maps: [docs/ui-mockups.md](docs/ui-mockups.md).
+
+## Gamepads
+
+`GamepadService` runs SDL3 (`SDL_INIT_GAMEPAD` only, no window) on its own
+thread and feeds `InputRouter::postAction(..., Gamepad)`. The pure mapping
+and timing code is `PadInput` (`src/padinput.*`).
+
+- **Mappings:** SDL's built-in controller database, then
+  `SDL_GAMECONTROLLERCONFIG` / `SDL_GAMECONTROLLERCONFIG_FILE` from the
+  environment, then `~/.config/mightyos/gamecontrollerdb.txt` if it exists
+  (SDL format, e.g. lines from the community `gamecontrollerdb.txt`;
+  regular file, at most 2 MiB). Nothing is downloaded. Launched games don't
+  inherit the `SDL_*` variables (Launcher's environment allowlist).
+- **No grabs:** SDL and MightyOS's own wake-up fds only read the device
+  nodes, so games get the controller as usual. Device access comes from the
+  seat (`uaccess` ACL on `/dev/input/event*`); no group membership needed
+  (PLAN D16: the kiosk user is in neither `video` nor `input`).
+- **Idle cost:** without a video subsystem `SDL_WaitEvent` polls every
+  1 ms (about 2.5% of a core with a pad open on the test PC). The service
+  (its SDL-free core is `PadHub`) therefore sleeps in `poll()` on its own
+  read-only wake-up fds of the pads' nodes (`/dev/input/eventN`, or
+  `/dev/hidrawN` for SDL's HIDAPI drivers: DualSense, DS4, Switch Pro, Xbox
+  over Bluetooth), inotify on `/dev/input` and an eventfd, and pumps SDL
+  only on input, hotplug or a due repeat/rumble: 0 CPU ticks in 30 s idle.
+  While a hidraw pad rumbles, SDL is pumped every 10 ms. evdev nodes that
+  report letter keys (keyboard-like) are refused as wake-up fds. Only a pad
+  without any usable wake-up fd (or a node that hung up and hasn't come
+  back) makes the service use `SDL_WaitEventTimeout` while it is connected;
+  that is logged (`mightyos.gamepad`), and `mightyos-inputtest` shows
+  `wake=sdl-poll` for such a pad.
+- **Steam:** SDL hides Steam Input's virtual gamepads (28de:11ff) unless
+  `SDL_GAMECONTROLLER_ALLOW_STEAM_VIRTUAL_GAMEPAD` is set, and MightyOS
+  skips them explicitly too, so a pad is never seen twice. Steam's
+  *Desktop Layout* (pad -> keyboard/mouse while Steam runs) would still
+  double the input as key presses; turn it off in Steam (Settings >
+  Controller > Desktop Layout) until M6 handles Steam.
+
+## TV remote (HDMI-CEC)
+
+`CecService` reads the TV remote through the Linux CEC framework
+(`/dev/cecN`). Without a `/dev/cec*` device it does nothing and logs
+nothing. Most PC GPUs have no CEC on HDMI; a USB adapter such as the
+Pulse-Eight works through the kernel's `pulse8-cec` driver
+(`inputattach --pulse8-cec /dev/ttyACM0`); libcec is not used yet.
+
+- **Address:** if the adapter has no logical address, MightyOS claims a
+  Playback one; if all three are taken (the claim ends as Unregistered,
+  15) it clears that and claims a Recording address instead. It listens as
+  a non-exclusive follower. The kernel's remote-to-keyboard passthrough is
+  left off; if an address configured by someone else has it on, MightyOS
+  ignores CEC key messages (logged), so keys never arrive twice.
+- **What goes on the bus:** after a claim the **kernel** broadcasts
+  `<Report Physical Address>` and answers the core queries (`<Give Physical
+  Address>`, `<Get CEC Version>`, `<Give Device Vendor ID>`). MightyOS
+  itself only replies, at most 5 messages per second, and never to a
+  broadcast except as below: `<Set OSD Name>` "MightyOS", power status
+  "on", menu status "active", deck status "stop" (mandatory for Playback
+  devices), and `<Feature Abort>` for other opcodes sent to it. **PLAN
+  D17:** MightyOS never makes itself the active source (no `<Active
+  Source>`, `<Image View On>` or TV power-on at startup). Only when the TV
+  routes to its physical address (`<Set Stream Path>`) does it answer with
+  `<Active Source>`, and it answers `<Request Active Source>` only while it
+  is the active source. The opt-in setting from D17 (send `<Active
+  Source>` after a local press, `<Inactive Source>` on exit) comes with the
+  M8 CEC settings.
+- **Trust (PLAN D18):** key frames addressed to broadcast are dropped
+  (TVs address them to the device; any device on the bus could broadcast),
+  presses are limited to about 10 per second, and the remote has its own
+  trust level in Settings > Controllers: *navigation* (default), *full* or
+  *off* (see "Controls").
+
+Device access (**PLAN D16**): `/dev/cec*` is `root:video 0660` on Ubuntu.
+MightyOS uses a seat-local udev rule, never `video` group membership; the
+rule ships with the M6 session packaging. Until then, for a test with a
+CEC adapter, as an admin:
+
+```sh
+echo 'SUBSYSTEM=="cec", KERNEL=="cec[0-9]*", TAG+="uaccess"' | sudo tee /etc/udev/rules.d/70-mightyos-cec.rules
+sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=cec
+```
+
+`uaccess` gives access only to the user on the active local seat. With it,
+programs of that user can also send CEC commands to the TV and other
+devices on the bus (power, input switching); the kiosk user must not be in
+`video` or `input` (an install-time check in M6). MightyOS changes nothing
+itself.
+
+Fake remote for development and tests, only with `MIGHTYOS_DEV_TOOLS=ON`
+(key names: `select`/`ok`, `back`/
+`exit`, `up`, `down`, `left`, `right`, `home`/`root-menu`, `setup-menu`,
+`contents-menu`, `red`, `green`, `yellow`, `blue`, `channel-up`,
+`channel-down`, `rewind`, `fast-forward`, `0`-`9`; `+key` holds, `-key`
+releases):
+
+```sh
+./build/mightyos --fake-cec fifo &         # creates $XDG_RUNTIME_DIR/mightyos-fake-cec (0600)
+echo right > "$XDG_RUNTIME_DIR/mightyos-fake-cec"
+printf 'up\nselect\n' | ./build/mightyos-inputtest --fake-cec --seconds 3
+```
+
+The FIFO is only used if `$XDG_RUNTIME_DIR` is your own directory with mode
+0700, and the FIFO is yours with mode 0600; it is opened once, read-write,
+relative to that checked directory.
+
+## Hands-on checklist (gamepad and remote)
+
+`mightyos-inputtest` needs no display and works over SSH. It prints one
+line per controller change and per action:
+
+1. **Detection.** `./build/mightyos-inputtest --seconds 3`. Expected, with
+   the Xbox Series X pad on USB:
+   `connected id=1 name="Xbox Series X Controller" type=xboxone style=Xbox guid=0300f5a35e040000120b000009050000 rumble=yes path=/dev/input/event4 wake=fd (at start)`.
+2. **Every button.** `./build/mightyos-inputtest --seconds 60`, then press, one
+   at a time: A, B, X, Y, Menu, View, LB, RB, LT, RT, each D-pad direction,
+   the left stick in each direction, Guide. Expected, in order:
+   `action Accept`, `Back`, `Favorite`, `Search`, `Options`, `QuickPanel`,
+   `PrevCategory`, `NextCategory`, `PageUp`, `PageDown`, `Navigate up/down/
+   left/right` (D-pad and stick alike), `Guide`, each with
+   `source=Gamepad repeat=no`, plus one `style Xbox` line before the first.
+   The right stick, stick clicks and the Share button print nothing.
+3. **Repeat.** Hold D-pad right for about 2 s: one `repeat=no`, then after
+   ~0.35 s a stream of `repeat=yes` that speeds up. Release: it stops at once.
+   A trigger pulled and held prints exactly one `PageDown`. Nudging the
+   stick slightly prints nothing. Holding the stick on a diagonal prints one
+   direction and keeps repeating it, never alternating.
+4. **Hotplug.** During a 30 s run, unplug the pad (`disconnected ...`) and
+   plug it back in (`connected ...`, without `(at start)`).
+5. **Rumble.** `./build/mightyos-inputtest --seconds 20 --rumble`, then
+   press A: `rumble requested` and a short, light buzz.
+6. **Guide while a game runs.** `./build/mightyos-inputtest --seconds 20 --running`:
+   no button prints anything (A and the D-pad included); hold Guide for 1 s:
+   `guideHeld source=Gamepad` once per hold.
+7. **Visual test** (once cage is installed: `sudo apt install cage`). On
+   tty1, logged in as the test user:
+   `cage -- ~/mightyos-dev/build/mightyos --fullscreen`. Check that the
+   prompt bar shows Xbox glyphs (green A, red B, ...) after the first pad
+   press and key caps after a key press; that LB/RB switch categories,
+   Guide goes to Home > Favorites from a game grid, and the end of a row
+   bumps with a short rumble (once per hold, not on every repeat);
+   Settings > Controllers lists the pad, turns vibration off and on and
+   switches the TV remote level; launching a game (mock: the test app) and holding
+   Guide there shows "The Guide menu ... arrives in M6" after closing it.
+   To stop it (cage has no quit key and MightyOS no quit action yet),
+   switch to another VT with Ctrl+Alt+F2, log in and run `pkill -x cage`.
+8. **Remote without hardware.** `printf 'up\n+right\n' | ./build/mightyos-inputtest --fake-cec --seconds 3`:
+   `Navigate up`, `Navigate right repeat=no`, then `repeat=yes` lines
+   (source=Remote). `printf 'red\nyellow\n' | ./build/mightyos-inputtest --fake-cec --seconds 2`
+   prints both as `(dropped)` (navigation only); with `--tv-remote full`
+   they come through as `Options` and `Search`.
 
 ## Layout
 
@@ -191,10 +394,23 @@ CMakeLists.txt
 data/mock/library.json  mock systems + games (same ids as M1), until M4
 docs/ui-mockups.md   screen mockups and focus maps
 src/                 C++, static library mightyos_core = QML module MightyOS.Core
-  main.cpp           CLI, engine, image provider, attaches InputRouter to the window
+  main.cpp           CLI, engine, image provider, attaches InputRouter to the window,
+                     starts (and joins on quit) the gamepad and CEC threads
   launcher.{h,cpp}   runs one app at a time (QProcess, clean env, own session)
   inputrouter.{h,cpp} key/mouse -> actions, repeat policy, mute/blocked,
-                     thread-safe postAction(), lastSource, cursor auto-hide
+                     thread-safe post*(), lastSource, gamepadStyle, guideHeld,
+                     rumble policy, cursor auto-hide
+  padinput.{h,cpp}   pure pad logic: mapping, stick/trigger hysteresis, repeat,
+                     Guide hold, token bucket; InputGate (posting, coalescing,
+                     app-running rule)
+  padhub.{h,cpp}     SDL-free core of the pad thread: pads, wake-up fds, poll(),
+                     latching, rumble target
+  gamepadservice.{h,cpp} SDL3 thread: hotplug, mappings, rumble
+  textsanitize.{h,cpp} cleaning of device names, terminal escaping
+  cecinput.{h,cpp}   pure CEC logic: UI command mapping, parsing, replies, repeat
+  cecservice.{h,cpp} CEC worker + backends (kernel /dev/cecN, fake, libcec stub)
+  settings.{h,cpp}   global settings.json (rumble, tvRemote)
+  feedback.{h,cpp}   SoundFx Bump/Error -> InputRouter::rumble()
   navstate.{h,cpp}   focus-path persistence (navstate.json), per profile
   soundfx.{h,cpp}    UI sounds API (no-op stub until QtMultimedia is available)
   tilelistmodel.{h,cpp} the model contract every row/grid uses
@@ -215,28 +431,35 @@ qml/                 static library mightyos_ui = QML module MightyOS.UI
   screens/           HomeScreen, SystemListScreen, GameGridScreen, CategoryScreen, AppListScreen
   ProfilePicker, ProfileEditor, ChoiceRow, ProfileChip   profiles UI
   Tile, TileRow, TileGrid, CategoryBar, FocusRing, PointerArea, WheelStepper
-  PromptBar, Breadcrumb, InfoHeader, ContextMenu, Dialog, Toast, Clock,
+  PromptBar, ButtonGlyph (+ Glyphs.js: per-device glyphs), Breadcrumb, InfoHeader, ContextMenu, Dialog, Toast, Clock,
   LaunchOverlay, Icon (+ Icons.js shared icon table), Theme (singleton)
   Catalog.js         fixed Home categories and Store/Settings sections
 testapp/             mightyos-testapp, stand-in launch target (--quit-after, --exit-code, --crash)
+tools/inputtest.cpp  mightyos-inputtest: prints pads, remote and actions (no GUI)
 tests/               tst_launcher, tst_inputrouter, tst_navstate, tst_tilelistmodel,
                      tst_desktopentry, tst_appregistry, tst_profiles, tst_favorites,
-                     tst_artwork, tst_qml + qml/
+                     tst_artwork, tst_padinput, tst_padhub, tst_gamepadservice, tst_cec,
+                     tst_settings, tst_qml + qml/
 ```
 
 ### Input pipeline
 
 ```
-keyboard / mouse buttons --(window event filter)--+
-SDL3 gamepad thread (M3) --postAction(), queued---+--> InputRouter --triggered(action, arg)-->
-CEC remote thread (M3)   --postAction(), queued---+
-    Main.route(): Dialog > ContextMenu > ProfilePicker > NavStack -> top screen.handleAction()
+keyboard / mouse buttons --(window event filter)-----------------------------+
+SDL3 thread: PadState (repeat, hysteresis) -> InputGate --postAction, queued-+--> InputRouter --triggered(action, arg)-->
+CEC backend thread -> CEC worker: RemoteState -> InputGate --postAction------+        |  guideHeld (while running)
+    Main.route(): Guide -> close modals, Home                                         |  rumbleRequested -> SDL thread
+                  Dialog > ContextMenu > ProfilePicker > NavStack -> top screen.handleAction()
                                                    -> NavStack defaults (Back pops, LB/RB, Options, Favorite)
 ```
 
-`InputRouter::postAction(action, arg, isRepeat, source)` is the only member
-that may be called from another thread. Delivery always happens on the GUI
-thread, and the blocked, mute and repeat checks run at delivery time.
+`InputRouter`'s `post*()` members are the only ones that may be called from
+another thread. Delivery always happens on the GUI thread, and the
+blocked, mute and repeat checks run at delivery time. Each input thread
+keeps at most one Navigate repeat per direction in the queue (a pending
+counter the router decrements on delivery), so a busy GUI thread never
+scrolls past where the user let go. The threads are joined on
+`aboutToQuit`, before the engine (and InputRouter) is destroyed.
 
 ### Data flow
 

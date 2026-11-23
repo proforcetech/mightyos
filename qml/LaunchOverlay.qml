@@ -69,6 +69,7 @@ Rectangle {
         }
 
         Text {
+            textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
             text: overlay.launching ? qsTr("Launching %1…").arg(overlay.title)
                                     : qsTr("%1 is running").arg(overlay.title)
@@ -79,6 +80,7 @@ Rectangle {
         }
 
         Text {
+            textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
             text: qsTr("Close the app to return to MightyOS")
             color: Theme.textDim

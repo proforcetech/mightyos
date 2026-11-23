@@ -1,13 +1,22 @@
 #include "inputrouter.h"
 
+#include "textsanitize.h"
+
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QInputMethodQueryEvent>
 #include <QKeyEvent>
+#include <QLoggingCategory>
 #include <QMetaEnum>
 #include <QMouseEvent>
 #include <QThread>
 #include <QWindow>
+
+#include <algorithm>
+
+// Info by default (guideHeld); QT_LOGGING_RULES="mightyos.input.debug=true"
+// logs every action.
+Q_LOGGING_CATEGORY(lcInput, "mightyos.input", QtInfoMsg)
 
 namespace {
 
@@ -83,6 +92,8 @@ InputRouter::KeyBinding InputRouter::keyActionFor(int key, Qt::KeyboardModifiers
 
     if (mods == Qt::ControlModifier && key == Qt::Key_F)
         return { Action::Search, {} };
+    if (mods == Qt::ControlModifier && key == Qt::Key_Home)
+        return { Action::Guide, {} };
     if (mods == Qt::ShiftModifier && key == Qt::Key_Slash)
         return { Action::Search, {} };
     if (mods != Qt::NoModifier)
@@ -119,6 +130,8 @@ InputRouter::KeyBinding InputRouter::keyActionFor(int key, Qt::KeyboardModifiers
 
     case Qt::Key_Home:      return { Action::PageUp, {} };
     case Qt::Key_End:       return { Action::PageDown, {} };
+
+    case Qt::Key_HomePage:  return { Action::Guide, {} };
     }
     return {};
 }
@@ -138,6 +151,137 @@ void InputRouter::postAction(Action action, const QString &arg, bool isRepeat, S
     }, Qt::QueuedConnection);
 }
 
+void InputRouter::postAction(Action action, const QString &arg, bool isRepeat, Source source,
+                             std::shared_ptr<std::atomic<int>> pending)
+{
+    QMetaObject::invokeMethod(this, [this, action, arg, isRepeat, source, pending = std::move(pending)] {
+        deliver(action, arg, isRepeat, source);
+        if (pending)
+            pending->fetch_sub(1, std::memory_order_acq_rel);
+    }, Qt::QueuedConnection);
+}
+
+void InputRouter::postGuideHeld(Source source)
+{
+    QMetaObject::invokeMethod(this, [this, source] {
+        if (source == Source::Remote && m_remoteMode == RemoteMode::RemoteOff)
+            return;
+        if (!m_secureEntry)
+            qCInfo(lcInput) << "Guide held while an app is running, source" << source;
+        setLastSource(source);
+        emit guideHeld(source);
+    }, Qt::QueuedConnection);
+}
+
+void InputRouter::postGamepadStyle(PadStyle style)
+{
+    QMetaObject::invokeMethod(this, [this, style] { setGamepadStyle(style); }, Qt::QueuedConnection);
+}
+
+void InputRouter::postDeviceNotice(bool connected, quint32 id, const QString &rawName, Source source,
+                                   bool initial)
+{
+    QString name = TextSanitize::label(rawName);
+    if (name.isEmpty())
+        name = source == Source::Remote ? QStringLiteral("TV remote") : QStringLiteral("Gamepad");
+    QMetaObject::invokeMethod(this, [this, connected, id, name, source, initial] {
+        const auto it = std::find_if(m_devices.begin(), m_devices.end(),
+                                     [&](const Device &d) { return d.id == id && d.source == source; });
+        if (connected && it == m_devices.end())
+            m_devices.append({ id, name, source });
+        else if (!connected && it != m_devices.end())
+            m_devices.erase(it);
+        else
+            return;   // duplicate notice
+        emit controllersChanged();
+        emit deviceChanged(connected, name, source, initial);
+    }, Qt::QueuedConnection);
+}
+
+void InputRouter::setGamepadStyle(PadStyle style)
+{
+    if (m_gamepadStyle == style)
+        return;
+    m_gamepadStyle = style;
+    emit gamepadStyleChanged();
+}
+
+QStringList InputRouter::controllers() const
+{
+    QStringList names;
+    for (const Device &d : m_devices)
+        names.append(d.name);
+    return names;
+}
+
+void InputRouter::setRumbleEnabled(bool enabled)
+{
+    if (m_rumbleEnabled == enabled)
+        return;
+    m_rumbleEnabled = enabled;
+    emit rumbleEnabledChanged();
+}
+
+void InputRouter::setRemoteMode(RemoteMode mode)
+{
+    if (m_remoteMode == mode)
+        return;
+    m_remoteMode = mode;
+    emit remoteModeChanged();
+}
+
+void InputRouter::setAcceptRemote(bool accept)
+{
+    if (m_acceptRemote == accept)
+        return;
+    m_acceptRemote = accept;
+    emit acceptRemoteChanged();
+}
+
+void InputRouter::setSecureEntry(bool secure)
+{
+    if (m_secureEntry == secure)
+        return;
+    m_secureEntry = secure;
+    emit secureEntryChanged();
+}
+
+bool InputRouter::remoteAllows(Action action, RemoteMode mode, bool restricted)
+{
+    if (mode == RemoteMode::RemoteOff)
+        return false;
+    if (restricted)
+        return action == Action::Back || action == Action::Guide;
+    if (mode == RemoteMode::RemoteFull)
+        return true;
+    switch (action) {
+    case Action::Navigate:
+    case Action::Accept:
+    case Action::Back:
+    case Action::PageUp:
+    case Action::PageDown:
+    case Action::PrevCategory:
+    case Action::NextCategory:
+    case Action::Guide:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool InputRouter::rumble(Feedback kind)
+{
+    if (!m_rumbleEnabled || m_blocked || m_lastSource != Source::Gamepad)
+        return false;
+    if (kind == Feedback::Bump) {
+        if (m_bumpRumbled)
+            return false;   // already buzzed for this held direction
+        m_bumpRumbled = true;
+    }
+    emit rumbleRequested(kind);
+    return true;
+}
+
 bool InputRouter::dispatch(Action action, const QString &arg, Source source)
 {
     Q_ASSERT(QThread::currentThread() == thread());
@@ -155,10 +299,19 @@ bool InputRouter::deliver(Action action, const QString &arg, bool isRepeat, Sour
     if (source != Source::Mouse)
         setCursorHidden(true);
 
-    if (!isAccepting())
+    const bool trusted = source != Source::Remote
+                      || remoteAllows(action, m_remoteMode, m_secureEntry || !m_acceptRemote);
+    const bool deliverIt = trusted && isAccepting() && !(isRepeat && !isRepeatable(action));
+    if (!m_secureEntry) {
+        // Secure entry: nothing about actions leaves the router except
+        // triggered() to the entry itself.
+        qCDebug(lcInput) << action << arg << source << (isRepeat ? "repeat" : "") << (deliverIt ? "" : "dropped");
+        emit received(action, arg, isRepeat, source, deliverIt);
+    }
+    if (!deliverIt)
         return false;
-    if (isRepeat && !isRepeatable(action))
-        return false;
+    if (!isRepeat)
+        m_bumpRumbled = false;   // a fresh press may bump (and buzz) again
 
     emit triggered(action, arg);
     return true;

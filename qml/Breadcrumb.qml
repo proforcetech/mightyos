@@ -26,6 +26,7 @@ Row {
             spacing: Theme.spacingS
 
             Text {
+                textFormat: Text.PlainText
                 visible: crumb.index > 0
                 text: "›"
                 color: Theme.textDim
@@ -33,6 +34,7 @@ Row {
                 font.pixelSize: Theme.fontBody
             }
             Text {
+                textFormat: Text.PlainText
                 text: crumb.modelData
                 color: crumb.isLast || area.containsMouse ? Theme.text : Theme.textDim
                 font.family: Theme.fontFamily

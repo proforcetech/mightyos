@@ -24,6 +24,9 @@ Sources: `guide.txt`, plus design reports from the gui-expert and security-exper
 | D12 | **Steam is a game "system", like an emulator.** Games → [Steam] → one tile per installed game | Steam games come from parsing `appmanifest_*.acf` files. They use the same SystemList → GameGrid screens as emulators. Other PC launchers (Heroic, Lutris) can join later the same way |
 | D13 | **Multiple user profiles**, plus a **kids/restricted mode** | Each profile has its own favorites, history, saves folder, theme and per-profile settings. A kids profile only shows allowed systems, games and apps, filtered by content rating, and can't use the store or settings. Leaving a kids profile requires the PIN. See §4 for its limits |
 | D14 | **HDMI-CEC TV remote** support | The TV remote's D-pad, OK, Back and Home buttons go into InputRouter as the same actions as other devices. Uses libcec or the kernel CEC framework (`/dev/cec*`). **Most PC GPUs don't expose CEC on their HDMI port**, so this usually needs a USB-CEC adapter such as a Pulse-Eight, or a mini PC with built-in CEC |
+| D16 | **CEC access via a seat-local udev uaccess rule**, never `video` group membership | Rule file `/etc/udev/rules.d/70-mightyos-cec.rules`: `SUBSYSTEM=="cec", KERNEL=="cec[0-9]*", TAG+="uaccess"`. The kiosk user must not be in `video` or `input` (install-time check). Emulator Flatpaks get `--nodevice=all --device=input`. Ships with M6 session packaging (security-expert, M3 review) |
+| D17 | **No automatic CEC Active Source.** Opt-in setting, default off | When enabled: send only after a fresh local gamepad or keyboard press; never at startup, on crash restart, in safe mode, or from Remote input; at most once every 60 s; send `<Inactive Source>` on exit |
+| D18 | **Input sources have trust levels.** The TV remote (CEC) is lower trust | Secure screens (PIN pad, admin on-screen keyboard, Bluetooth pairing confirm, leaving kids mode, store install confirm, Close game) ignore `Source::Remote` for everything except **Back/Home (cancel)**, so a remote-only user can never confirm, enter a digit or toggle anything there, but also can't be trapped. CEC presses are rate-limited and broadcast frames are dropped. Settings: TV remote off / navigation only / full |
 | D15 | License: **MIT** | `LICENSE` at the repo root. Third-party pieces keep their own licenses (Qt is LGPL and dynamically linked; SDL3 is zlib) |
 
 **Conflict resolved:** the GUI design suggested passing the PIN through polkit/PAM for system-wide installs. The security review rejects that because it would weaken every polkit decision on the system. Instead, installs are `--user` (no prompt needed), and the PIN is checked **only** by our own helper for our own action IDs.
@@ -94,7 +97,13 @@ Long game lists use a **grid with A–Z jump** rather than a single horizontal r
 | Install or remove store apps, change Wi-Fi, change parental settings, change timezone | **PIN**, checked by `mightyos-helper` |
 | Add remotes, Flatpak sandbox overrides, apt/system updates, set or reset the PIN | **Admin password** via our own polkit agent (on-screen keyboard) |
 
-- PIN storage: argon2id (64 MiB, t=3), in a root-only `0600` file. Lockout persists across restarts, with back-off after 3 failures and a full disable after 10. There is no master PIN and no reset backdoor.
+- PIN storage: argon2id (64 MiB, t=3), in a root-only `0600` file. Lockout persists across restarts, with **exponential back-off capped at 1 hour** (not a permanent disable, which an injected-input attacker could use to lock out the owner). There is no master PIN and no reset backdoor.
+- Secure entry (PIN pad, admin on-screen keyboard):
+  - The layout and the starting cursor position are randomised for each prompt.
+  - InputRouter suppresses action logging and the `received` signal while secure entry is open, so gamepad devices shared with other processes and debug logs can't replay the entry.
+  - Prefer a physical keyboard for the admin password when one is present.
+  - Consider `EVIOCGRAB` on MightyOS's own evdev fds during the prompt.
+- Every `Text` showing outside strings (device names, `.desktop` titles, toasts, dialogs) uses `Text.PlainText`. Device names are cleaned of control and bidi characters.
 - **Parental lock and kids mode are UI features, not a security boundary**, and will be labelled that way. All profiles run as the same Unix user, so a determined child who reaches a terminal or browser could get around them. The mitigations:
   - kids profiles have no store, settings, browser or "Close to desktop"
   - leaving a kids profile requires the PIN, checked by the helper
@@ -155,4 +164,5 @@ M0 to M2 can be built entirely on the WSL dev box. M3 and later need a real x86 
 - [x] M0 walking skeleton, reviewed. Fixed: test app is bundled-only; launch-state guard; child process hygiene (own session, PDEATHSIG, clean fds/signals, group terminate); edge-bump repeat; "crashed" toast; TZ passthrough
 - [x] M1 navigation framework, reviewed and fixed. C++ InputRouter, NavStack with persisted focus paths, TileRow/TileGrid/menus/dialogs, mock Emulators/Steam screens, LB/RB system stepping, 5 test targets (52 QML cases)
 - [x] M2 data layer & profiles, reviewed and fixed. TileListModel contract, AppRegistry (desktop/Flatpak/manifests, cached startup), ProfileService + picker (startup rule: picker only with 2+ profiles), per-profile favorites/history, ArtworkProvider with bounded caches, 322 test cases
-- [ ] M3 gamepad & TV remote (needs real hardware)
+- [x] M3 gamepad & TV remote, code- and security-reviewed and fixed. SDL3 GamepadService with PadHub poll wake-ups (~0% idle CPU), mapping/repeat/coalescing, Guide, rumble, Xbox/PS/Nintendo glyphs, CEC kernel and fake backends with trust levels (D16–D18), plain-text UI, `mightyos-inputtest`. Verified on the test PC with an Xbox Series X pad (detection, build, tests). **Pending:** hands-on button test by the user; kernel CEC, hidraw pads and Steam untested on hardware
+- [ ] M4 emulators & Steam library

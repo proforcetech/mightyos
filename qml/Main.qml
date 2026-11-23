@@ -11,6 +11,12 @@ import MightyOS.Core
 // the NavStack, which offers it to the top screen and then applies its
 // defaults.
 //
+// Guide (Guide button, Ctrl+Home, the remote's Home/Root Menu) answers
+// an open dialog or menu with its safe default (as Back does) and returns
+// to Home > Favorites. Held while an app runs it becomes
+// InputRouter.guideHeld, for the Guide overlay of M6; until then it is
+// logged and mentioned in a toast once the app has exited.
+//
 // Profiles: with exactly one profile MightyOS goes straight to Home; with
 // 2+ the picker is shown first, the last used profile preselected.
 // Choosing another profile resets the NavStack and restores that
@@ -33,6 +39,8 @@ Window {
     property bool launchStarted: false
 
     readonly property bool modalOpen: dialog.open || contextMenu.open || picker.open
+    // Guide was held during the current launch (no overlay before M6).
+    property bool guideHeldWhileRunning: false
     // Who asked for the open context menu (the NavStack or the picker).
     property Item _menuOwner: null
 
@@ -49,8 +57,45 @@ Window {
     Binding { target: Theme; property: "windowHeight"; value: window.height }
     Binding { target: InputRouter; property: "blocked"; value: Launcher.running }
     Binding { target: InputRouter; property: "cursorHideDelay"; value: Theme.cursorHideDelay }
+    Binding { target: InputRouter; property: "rumbleEnabled"; value: Settings.rumble }
+    // PLAN D18: TV remote trust level, and the contexts it may only cancel.
+    Binding {
+        target: InputRouter; property: "remoteMode"
+        value: Settings.tvRemote === "off" ? InputRouter.RemoteOff
+             : Settings.tvRemote === "full" ? InputRouter.RemoteFull : InputRouter.RemoteNavigation
+    }
+    Binding {
+        target: InputRouter; property: "acceptRemote"
+        value: !(dialog.open && !dialog.acceptsRemote)
+               && !(navStack.current && !navStack.current.acceptsRemote)
+    }
+    Binding {
+        target: InputRouter; property: "secureEntry"
+        value: !!navStack.current && navStack.current.secureEntry
+    }
+
+    // Guide: close what is open (each modal's Back is its safe answer), then
+    // Home. The startup profile picker has nothing to go back to.
+    function goHome() {
+        for (let i = 0; i < 4 && window.modalOpen; ++i) {
+            if (dialog.open)
+                dialog.handleAction(InputRouter.Back, "")
+            else if (contextMenu.open)
+                contextMenu.handleAction(InputRouter.Back, "")
+            else if (picker.open && navStack.depth > 0)
+                picker.handleAction(InputRouter.Back, "")
+            else
+                break
+        }
+        if (window.modalOpen || !navStack.goHome())
+            SoundFx.play(SoundFx.Bump)
+    }
 
     function route(action: int, arg: string) {
+        if (action === InputRouter.Guide) {
+            goHome()
+            return
+        }
         if (dialog.open) {
             dialog.handleAction(action, arg)
             return
@@ -97,6 +142,7 @@ Window {
         launchTitle = item.title
         launchIcon = item.icon
         launchStarted = false
+        guideHeldWhileRunning = false
         navStack.persistNow()
         Launcher.launch(item.key, argv)
     }
@@ -159,6 +205,16 @@ Window {
         function onTriggered(action, arg) {
             window.route(action, arg)
         }
+        function onGuideHeld(source) {
+            // InputRouter logs it (mightyos.input); the overlay is M6.
+            if (Launcher.running)
+                window.guideHeldWhileRunning = true
+        }
+        function onDeviceChanged(connected, name, source, initial) {
+            if (initial || Launcher.running)
+                return
+            toast.show(connected ? qsTr("%1 connected").arg(name) : qsTr("%1 disconnected").arg(name), false)
+        }
     }
 
     Connections {
@@ -180,10 +236,14 @@ Window {
             window._returnFromLaunch()
             window.requestActivate()
             clock.refresh()
+            const guideHeld = window.guideHeldWhileRunning
+            window.guideHeldWhileRunning = false
             if (exitCode === -1)
                 toast.show(qsTr("%1 crashed").arg(window.launchTitle), true)
             else if (exitCode !== 0)
                 toast.show(qsTr("%1 exited with code %2").arg(window.launchTitle).arg(exitCode), true)
+            else if (guideHeld)
+                toast.show(qsTr("The Guide menu (resume / close a game) arrives in M6"), false)
         }
         function onFailed(id, error) {
             if (Launcher.running)

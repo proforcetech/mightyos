@@ -20,5 +20,5 @@ void SoundFx::setEnabled(bool enabled)
 
 void SoundFx::play(Sound sound)
 {
-    Q_UNUSED(sound)
+    emit played(sound);   // no audio backend yet (see header)
 }

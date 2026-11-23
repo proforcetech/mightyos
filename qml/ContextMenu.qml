@@ -113,6 +113,7 @@ Item {
             spacing: Theme.px(4)
 
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: menu.title
                 visible: text.length > 0
@@ -141,6 +142,7 @@ Item {
                     transform: Translate { y: entry.current ? menu.bumpY : 0 }
 
                     Text {
+                        textFormat: Text.PlainText
                         anchors.verticalCenter: parent.verticalCenter
                         x: Theme.spacingM
                         width: parent.width - 2 * Theme.spacingM

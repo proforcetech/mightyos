@@ -50,6 +50,7 @@ TileRow {
                 color: pill.current ? (pill.model.tint ?? Theme.accent) : Theme.textDim
             }
             Text {
+                textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
                 text: pill.model.title ?? ""
                 color: pill.current ? Theme.text : Theme.textDim

@@ -35,6 +35,7 @@ public:
 
 signals:
     void enabledChanged();
+    void played(SoundFx::Sound sound);
 
 private:
     bool m_enabled = true;

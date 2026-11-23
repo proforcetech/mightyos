@@ -1,4 +1,4 @@
-# MightyOS UI mockups and focus maps (M2)
+# MightyOS UI mockups and focus maps (M3)
 
 ASCII sketches of the screens as built, and how focus moves between them.
 Sizes are authored for 1920x1080 and scale with the window; the outer frame
@@ -234,4 +234,66 @@ Left/Right move between buttons; clicks outside do nothing.
 
 While an app runs: full-screen scrim, "<title> is running", all input
 blocked. On exit focus is restored to the launched tile and input is muted
-for 300 ms; a crash or non-zero exit shows a toast.
+for 300 ms; a crash or non-zero exit shows a toast. Controllers keep
+working in the game; holding Guide for 1 s is the only input that reaches
+MightyOS (Guide overlay in M6; for now "The Guide menu ... arrives in M6"
+after the app exits).
+
+## Guide (Home)
+
+Guide, Ctrl+Home or the remote's Home / Root Menu from anywhere: an open
+context menu closes, an open dialog is answered with its safe button (as
+Back), then the stack pops to Home and the focus lands on the Favorites
+pill of the category bar. Every category keeps its remembered position. The
+startup profile picker has nothing to go back to (bump).
+
+## Settings > Controllers (until the full screen in M8)
+
+```
+   +------------------------------------------------------------------+
+   | Controllers                                                      |
+   | Connected: Xbox Series X Controller, TV remote (cec0).           |
+   | Vibration is on: a short pulse at the end of a row and on errors.|
+   | TV remote: navigation only (move, OK, Back, Home).               |
+   |      (#Close#)  ( Vibration off )  ( TV remote: full )           |
+   +------------------------------------------------------------------+
+[A] Select   [B] Cancel
+```
+
+A Dialog: Close is the default and the Back answer. "Vibration" toggles
+Settings.rumble (with a pulse when turned on). "TV remote" steps through
+navigation -> full -> off -> navigation (Settings.tvRemote, PLAN D18); the
+button names the level it switches to. The TV remote itself can only
+cancel this dialog, so it can never raise its own trust level. Device names
+are cleaned of control and bidi characters and shown as plain text.
+
+## TV remote trust (PLAN D18)
+
+- navigation (default): move, OK, Back, Channel +/-, Rewind / Fast forward,
+  Home. Colour keys (Options, Favorite, Search, Quick panel) are ignored.
+- full: every key in the Controls table.
+- off: the remote is ignored.
+- Remote-restricted contexts (Power off?, Delete profile?, Settings >
+  Controllers; from M8 the PIN pad, admin keyboard and other secure
+  screens): the remote can only Back / Home out. Focus and the default
+  button stay on the safe choice.
+
+## Prompt glyphs
+
+The prompt bar draws the buttons of the device used last (vector shapes and
+SVG symbols, scaled with the theme). Gamepad buttons are positional, so the
+same prompt shows the button in the same place on every pad:
+
+```
+            Accept  Back   Favorite Search  Options  Quick   Category  Page
+keyboard    [Enter] [Esc]  [F]      [/]     [M]      [Q]     [PgUp][PgDn] [Home][End]
+xbox        (A)grn  (B)red (X)blu   (Y)yel  (=)menu  (view)  (LB)(RB)     /LT\/RT\
+playstation (x)     (o)    ([])     (/\)   (=)opt   (Create) (L1)(R1)    /L2\/R2\
+nintendo    (B)     (A)    (Y)      (X)     (+)      (-)     (L)(R)       /ZL\/ZR\
+remote      (OK)    (Back) [blue]   [yel]   [red]    [green] (<<)(>>)     (CH+)(CH-)
+```
+
+`( )` round buttons, `/ \` triggers (rounded on top), `[ ]` key caps or
+the remote's colour keys. The glyph changes as soon as another device is
+used (a key press after the pad switches back to key caps). Mockups above
+show one style each; every prompt follows these rows.

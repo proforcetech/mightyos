@@ -3,37 +3,29 @@ import QtQuick
 import MightyOS.Core
 
 // Bottom hint bar, driven by the current screen's (or open modal's)
-// `prompts`: a list of { action: InputRouter.<Action>, label } with
-// optional `pad` / `key` glyph overrides. The glyph follows
-// InputRouter.lastSource: gamepad/remote show controller buttons, keyboard
-// and mouse show key caps. Device-specific button art (Xbox/PS/Nintendo)
-// comes in M3. Every prompt is also clickable, which gives mouse users Back,
-// Options etc. without a dedicated button.
+// `prompts`: a list of { action: InputRouter.<Action>, label } with an
+// optional `actions: [...]` when one prompt stands for a pair (LB RB).
+//
+// The glyphs follow the device used last (InputRouter.lastSource):
+// keyboard / mouse show key caps, a gamepad shows its own buttons
+// (InputRouter.gamepadStyle: Xbox, PlayStation, Nintendo by position), the
+// TV remote shows OK / Back / colour keys. Every prompt is also clickable,
+// which gives mouse users Back, Options etc. without a dedicated button.
 Row {
     id: bar
 
     property var prompts: []
 
-    readonly property bool _padGlyphs: InputRouter.lastSource === InputRouter.Gamepad
-                                       || InputRouter.lastSource === InputRouter.Remote
-
-    // Default glyphs per action (PLAN.md section 3).
-    function _glyph(prompt: var): string {
-        if (_padGlyphs && prompt.pad) return prompt.pad
-        if (!_padGlyphs && prompt.key) return prompt.key
-        switch (prompt.action) {
-        case InputRouter.Accept:       return _padGlyphs ? "A" : qsTr("Enter")
-        case InputRouter.Back:         return _padGlyphs ? "B" : qsTr("Esc")
-        case InputRouter.Favorite:     return _padGlyphs ? "X" : "F"
-        case InputRouter.Search:       return _padGlyphs ? "Y" : "/"
-        case InputRouter.Options:      return _padGlyphs ? qsTr("Start") : "M"
-        case InputRouter.QuickPanel:   return _padGlyphs ? qsTr("Select") : "Q"
-        case InputRouter.PrevCategory: return _padGlyphs ? "LB" : qsTr("PgUp")
-        case InputRouter.NextCategory: return _padGlyphs ? "RB" : qsTr("PgDn")
-        case InputRouter.PageUp:       return _padGlyphs ? "LT" : qsTr("Home")
-        case InputRouter.PageDown:     return _padGlyphs ? "RT" : qsTr("End")
+    // "keyboard" | "xbox" | "playstation" | "nintendo" | "remote"
+    readonly property string glyphStyle: {
+        switch (InputRouter.lastSource) {
+        case InputRouter.Gamepad:
+            return InputRouter.gamepadStyle === InputRouter.PlayStation ? "playstation"
+                 : InputRouter.gamepadStyle === InputRouter.Nintendo ? "nintendo" : "xbox"
+        case InputRouter.Remote:
+            return "remote"
         }
-        return "?"
+        return "keyboard"
     }
 
     spacing: Theme.spacingL
@@ -44,7 +36,9 @@ Row {
         delegate: Item {
             id: prompt
             required property var modelData
+            required property int index
 
+            objectName: "prompt" + index
             width: content.implicitWidth
             height: content.implicitHeight
 
@@ -52,23 +46,22 @@ Row {
                 id: content
                 spacing: Theme.spacingS
 
-                Rectangle {
+                Row {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: Math.max(height, glyph.implicitWidth + 2 * Theme.spacingS)
-                    height: Theme.px(44)
-                    radius: bar._padGlyphs ? height / 2 : Theme.px(8)
-                    color: area.containsMouse ? Theme.accent : Theme.text
-                    Text {
-                        id: glyph
-                        anchors.centerIn: parent
-                        text: bar._glyph(prompt.modelData)
-                        color: Theme.background
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSmall
-                        font.weight: Font.Bold
+                    spacing: Math.round(Theme.spacingS / 2)
+                    Repeater {
+                        model: prompt.modelData.actions ?? [prompt.modelData.action]
+                        delegate: ButtonGlyph {
+                            required property int modelData
+                            objectName: "glyph"
+                            action: modelData
+                            glyphStyle: bar.glyphStyle
+                            highlighted: area.containsMouse
+                        }
                     }
                 }
                 Text {
+                    textFormat: Text.PlainText
                     anchors.verticalCenter: parent.verticalCenter
                     text: prompt.modelData.label
                     color: area.containsMouse ? Theme.text : Theme.textDim

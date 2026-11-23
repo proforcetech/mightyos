@@ -56,6 +56,7 @@ Item {
     }
 
     Text {
+        textFormat: Text.PlainText
         id: caption
         anchors.verticalCenter: parent.verticalCenter
         width: Theme.px(170)
@@ -98,6 +99,7 @@ Item {
                 Behavior on scale { NumberAnimation { duration: Theme.animFast } }
 
                 Text {
+                    textFormat: Text.PlainText
                     id: text
                     anchors.centerIn: parent
                     visible: choiceRow.style === "text"

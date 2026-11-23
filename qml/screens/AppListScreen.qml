@@ -17,7 +17,8 @@ NavScreen {
         { action: InputRouter.Back, label: qsTr("Back") },
         { action: InputRouter.Favorite, label: qsTr("Favorite") },
         { action: InputRouter.Options, label: qsTr("Options") },
-        { action: InputRouter.PageDown, label: qsTr("Page"), pad: "LT RT", key: qsTr("Home End") }
+        { action: InputRouter.PageDown, label: qsTr("Page"),
+                    actions: [InputRouter.PageUp, InputRouter.PageDown] }
     ]
 
     function _updateFocused() {

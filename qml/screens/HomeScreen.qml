@@ -66,7 +66,7 @@ NavScreen {
             list.push({ action: InputRouter.Favorite, label: qsTr("Favorite") })
         list.push({ action: InputRouter.Options, label: qsTr("Options") },
                   { action: InputRouter.NextCategory, label: qsTr("Category"),
-                    pad: "LB RB", key: qsTr("PgUp PgDn") })
+                    actions: [InputRouter.PrevCategory, InputRouter.NextCategory] })
         return list
     }
 
@@ -224,6 +224,17 @@ NavScreen {
         _view(focusRow).wheelStep(steps)
     }
 
+    // Guide / Ctrl+Home: the Favorites category on the bar. The other
+    // categories keep their remembered positions.
+    function goHome() {
+        _preferContent = false
+        focusRow = 0
+        bar.restoreFocus(0, "favorites")   // onCurrentIndexChanged shows it
+        _showCategory()
+        _updateFocused()
+        navStateChanged()
+    }
+
     TileListModel { id: categoryModel }
     TileListModel { id: storeModel }
     TileListModel { id: settingsModel }
@@ -321,6 +332,7 @@ NavScreen {
         }
 
         Text {
+            textFormat: Text.PlainText
             visible: home._recentShown
             text: qsTr("Recent")
             color: Theme.textDim

@@ -1,4 +1,8 @@
 #include "inputrouter.h"
+#include "textsanitize.h"
+
+#include <QLoggingCategory>
+#include <QMutex>
 
 #include <QGuiApplication>
 #include <QKeyEvent>
@@ -34,6 +38,19 @@ private slots:
     void textInputKeepsItsKeys();
     void cursorAutoHide();
     void pointerMovedNeedsRealMovement();
+    void guideHeldBypassesBlocked();
+    void pendingCountClearedOnDelivery();
+    void gamepadStyleAndDevices();
+    void rumblePolicy();
+    void bumpRumblesOncePerHold();
+    void remoteTrustLevels_data();
+    void remoteTrustLevels();
+    void restrictedContextsLetRemoteOnlyCancel();
+    void secureEntryLogsNothing();
+    void deviceNamesAreSanitised();
+    void sanitiseLabels_data();
+    void sanitiseLabels();
+    void escapeForTerminal();
 };
 
 namespace {
@@ -75,6 +92,9 @@ void TestInputRouter::keyTable_data()
     QTest::newRow("pgdn") << int(Qt::Key_PageDown) << none << Action::NextCategory << QString();
     QTest::newRow("home") << int(Qt::Key_Home) << none << Action::PageUp << QString();
     QTest::newRow("end") << int(Qt::Key_End) << none << Action::PageDown << QString();
+    QTest::newRow("ctrl-home=guide") << int(Qt::Key_Home) << int(Qt::ControlModifier) << Action::Guide << QString();
+    QTest::newRow("homepage=guide") << int(Qt::Key_HomePage) << none << Action::Guide << QString();
+    QTest::newRow("shift-home") << int(Qt::Key_Home) << int(Qt::ShiftModifier) << Action::None << QString();
     QTest::newRow("ctrl-left") << int(Qt::Key_Left) << int(Qt::ControlModifier) << Action::None << QString();
     QTest::newRow("alt-f") << int(Qt::Key_F) << int(Qt::AltModifier) << Action::None << QString();
     QTest::newRow("ctrl-q") << int(Qt::Key_Q) << int(Qt::ControlModifier) << Action::None << QString();
@@ -425,6 +445,262 @@ void TestInputRouter::pointerMovedNeedsRealMovement()
     QVERIFY(!router.pointerMoved({ 101, 100 }));    // below the slop
     QVERIFY(router.pointerMoved({ 110, 100 }));
     QVERIFY(!router.pointerMoved({ 110, 100 }));    // synthetic hover, same spot
+}
+
+void TestInputRouter::guideHeldBypassesBlocked()
+{
+    InputRouter router;
+    QSignalSpy held(&router, &InputRouter::guideHeld);
+    QSignalSpy triggered(&router, &InputRouter::triggered);
+    router.setBlocked(true);
+    router.muteFor(10000);
+    // Guide as an action is blocked like everything else ...
+    router.postAction(Action::Guide, {}, false, Source::Gamepad);
+    // ... but "held while running" always arrives.
+    router.postGuideHeld(Source::Gamepad);
+    QTRY_COMPARE(held.count(), 1);
+    QCOMPARE(triggered.count(), 0);
+    QCOMPARE(router.lastSource(), Source::Gamepad);
+    router.muteFor(0);
+}
+
+void TestInputRouter::pendingCountClearedOnDelivery()
+{
+    InputRouter router;
+    auto pending = std::make_shared<std::atomic<int>>(2);
+    router.postAction(Action::Navigate, QStringLiteral("up"), false, Source::Gamepad, pending);
+    router.postAction(Action::Navigate, QStringLiteral("up"), true, Source::Gamepad, pending);
+    QCOMPARE(pending->load(), 2);   // nothing delivered yet
+    QCoreApplication::processEvents();
+    QCOMPARE(pending->load(), 0);
+    // Also when the action is dropped (blocked).
+    router.setBlocked(true);
+    pending->store(1);
+    router.postAction(Action::Accept, {}, false, Source::Gamepad, pending);
+    QTRY_COMPARE(pending->load(), 0);
+}
+
+void TestInputRouter::gamepadStyleAndDevices()
+{
+    InputRouter router;
+    QSignalSpy style(&router, &InputRouter::gamepadStyleChanged);
+    QSignalSpy devices(&router, &InputRouter::deviceChanged);
+    QCOMPARE(router.gamepadStyle(), InputRouter::PadStyle::Xbox);
+    router.postGamepadStyle(InputRouter::PadStyle::Nintendo);
+    router.postDeviceNotice(true, 7, QStringLiteral("Pro Controller"), Source::Gamepad, false);
+    router.postDeviceNotice(true, 7, QStringLiteral("Pro Controller"), Source::Gamepad, false);   // duplicate
+    router.postDeviceNotice(true, 9, QStringLiteral("Xbox Series X Controller"), Source::Gamepad, true);
+    QTRY_COMPARE(devices.count(), 2);
+    QCOMPARE(router.gamepadStyle(), InputRouter::PadStyle::Nintendo);
+    QCOMPARE(style.count(), 1);
+    QCOMPARE(router.controllers(),
+             (QStringList { QStringLiteral("Pro Controller"), QStringLiteral("Xbox Series X Controller") }));
+    QVERIFY(!devices.at(0).at(3).toBool());
+    QVERIFY(devices.at(1).at(3).toBool());   // initial
+    router.postDeviceNotice(false, 7, QStringLiteral("Pro Controller"), Source::Gamepad, false);
+    router.postDeviceNotice(false, 7, QStringLiteral("Pro Controller"), Source::Gamepad, false);
+    QTRY_COMPARE(devices.count(), 3);
+    QCoreApplication::processEvents();
+    QCOMPARE(devices.count(), 3);
+    QVERIFY(!devices.at(2).at(0).toBool());
+    QCOMPARE(router.controllers(), QStringList { QStringLiteral("Xbox Series X Controller") });
+}
+
+void TestInputRouter::rumblePolicy()
+{
+    InputRouter router;
+    QSignalSpy rumble(&router, &InputRouter::rumbleRequested);
+    // Keyboard user: no rumble.
+    sendKey(router, Qt::Key_Left);
+    QVERIFY(!router.rumble(InputRouter::Feedback::Bump));
+    // Gamepad user: yes.
+    router.dispatch(Action::Navigate, QStringLiteral("left"), Source::Gamepad);
+    QVERIFY(router.rumble(InputRouter::Feedback::Bump));
+    QVERIFY(router.rumble(InputRouter::Feedback::Error));
+    QCOMPARE(rumble.count(), 2);
+    QCOMPARE(rumble.at(1).at(0).value<InputRouter::Feedback>(), InputRouter::Feedback::Error);
+    // Never while an app runs.
+    router.setBlocked(true);
+    QVERIFY(!router.rumble(InputRouter::Feedback::Error));
+    router.setBlocked(false);
+    // Setting off.
+    router.setRumbleEnabled(false);
+    QVERIFY(!router.rumble(InputRouter::Feedback::Bump));
+    router.setRumbleEnabled(true);
+    QVERIFY(!router.rumble(InputRouter::Feedback::Bump));   // same hold: already buzzed
+    router.dispatch(Action::Navigate, QStringLiteral("left"), Source::Gamepad);
+    QVERIFY(router.rumble(InputRouter::Feedback::Bump));
+    QCOMPARE(rumble.count(), 3);
+}
+
+void TestInputRouter::bumpRumblesOncePerHold()
+{
+    InputRouter router;
+    QSignalSpy rumble(&router, &InputRouter::rumbleRequested);
+    // Held right at the end of a row: the press bumps (and buzzes), every
+    // repeat bumps again but stays quiet.
+    router.postAction(Action::Navigate, QStringLiteral("right"), false, Source::Gamepad);
+    QCoreApplication::processEvents();
+    QVERIFY(router.rumble(InputRouter::Feedback::Bump));
+    for (int i = 0; i < 5; ++i) {
+        router.postAction(Action::Navigate, QStringLiteral("right"), true, Source::Gamepad);
+        QCoreApplication::processEvents();
+        QVERIFY(!router.rumble(InputRouter::Feedback::Bump));
+    }
+    // Errors are not affected.
+    QVERIFY(router.rumble(InputRouter::Feedback::Error));
+    // A fresh press may buzz again.
+    router.postAction(Action::Navigate, QStringLiteral("right"), false, Source::Gamepad);
+    QCoreApplication::processEvents();
+    QVERIFY(router.rumble(InputRouter::Feedback::Bump));
+    QCOMPARE(rumble.count(), 3);
+}
+
+void TestInputRouter::remoteTrustLevels_data()
+{
+    QTest::addColumn<Action>("action");
+    QTest::addColumn<bool>("navigation");   // allowed in RemoteNavigation
+    QTest::newRow("navigate") << Action::Navigate << true;
+    QTest::newRow("accept") << Action::Accept << true;
+    QTest::newRow("back") << Action::Back << true;
+    QTest::newRow("pageup") << Action::PageUp << true;
+    QTest::newRow("pagedown") << Action::PageDown << true;
+    QTest::newRow("prev") << Action::PrevCategory << true;
+    QTest::newRow("next") << Action::NextCategory << true;
+    QTest::newRow("guide") << Action::Guide << true;
+    QTest::newRow("favorite") << Action::Favorite << false;
+    QTest::newRow("options") << Action::Options << false;
+    QTest::newRow("search") << Action::Search << false;
+    QTest::newRow("quickpanel") << Action::QuickPanel << false;
+}
+
+void TestInputRouter::remoteTrustLevels()
+{
+    QFETCH(Action, action);
+    QFETCH(bool, navigation);
+    const QString arg = action == Action::Navigate ? QStringLiteral("up") : QString();
+    InputRouter router;
+    QCOMPARE(router.remoteMode(), InputRouter::RemoteMode::RemoteNavigation);   // the default
+    QCOMPARE(router.dispatch(action, arg, Source::Remote), navigation);
+    router.setRemoteMode(InputRouter::RemoteMode::RemoteFull);
+    QVERIFY(router.dispatch(action, arg, Source::Remote));
+    router.setRemoteMode(InputRouter::RemoteMode::RemoteOff);
+    QVERIFY(!router.dispatch(action, arg, Source::Remote));
+    // Other sources never care.
+    QVERIFY(router.dispatch(action, arg, Source::Gamepad));
+    QVERIFY(router.dispatch(action, arg, Source::Keyboard));
+}
+
+void TestInputRouter::restrictedContextsLetRemoteOnlyCancel()
+{
+    InputRouter router;
+    router.setRemoteMode(InputRouter::RemoteMode::RemoteFull);
+    router.setAcceptRemote(false);   // e.g. "Delete profile?" is open
+    QVERIFY(!router.dispatch(Action::Accept, {}, Source::Remote));
+    QVERIFY(!router.dispatch(Action::Navigate, QStringLiteral("right"), Source::Remote));
+    QVERIFY(!router.dispatch(Action::Options, {}, Source::Remote));
+    QVERIFY(router.dispatch(Action::Back, {}, Source::Remote));      // cancel
+    QVERIFY(router.dispatch(Action::Guide, {}, Source::Remote));     // cancel + Home
+    QVERIFY(router.dispatch(Action::Accept, {}, Source::Gamepad));   // the pad decides
+    router.setAcceptRemote(true);
+    router.setSecureEntry(true);                                     // same for secure entry
+    QVERIFY(!router.dispatch(Action::Accept, {}, Source::Remote));
+    QVERIFY(router.dispatch(Action::Back, {}, Source::Remote));
+    // Remote off: not even guideHeld.
+    QSignalSpy held(&router, &InputRouter::guideHeld);
+    router.setSecureEntry(false);
+    router.setRemoteMode(InputRouter::RemoteMode::RemoteOff);
+    router.postGuideHeld(Source::Remote);
+    router.postGuideHeld(Source::Gamepad);
+    QTRY_COMPARE(held.count(), 1);
+    QCoreApplication::processEvents();
+    QCOMPARE(held.count(), 1);
+}
+
+namespace {
+QMutex logMutex;
+QStringList capturedLog;
+void captureMessages(QtMsgType, const QMessageLogContext &, const QString &message)
+{
+    QMutexLocker lock(&logMutex);
+    capturedLog.append(message);
+}
+} // namespace
+
+void TestInputRouter::secureEntryLogsNothing()
+{
+    QLoggingCategory::setFilterRules(QStringLiteral("mightyos.input.debug=true"));
+    InputRouter router;
+    QSignalSpy received(&router, &InputRouter::received);
+    QSignalSpy triggered(&router, &InputRouter::triggered);
+    capturedLog.clear();
+    const QtMessageHandler previous = qInstallMessageHandler(captureMessages);
+
+    // Normal: every action is logged at debug level (sanity check).
+    router.dispatch(Action::Navigate, QStringLiteral("left"), Source::Gamepad);
+    QVERIFY(!capturedLog.isEmpty());
+    QCOMPARE(received.count(), 1);
+    capturedLog.clear();
+
+    // A PIN pad is open: the digits it gets must not show up anywhere.
+    router.setSecureEntry(true);
+    router.dispatch(Action::Navigate, QStringLiteral("up"), Source::Gamepad);
+    router.dispatch(Action::Accept, {}, Source::Gamepad);
+    sendKey(router, Qt::Key_Right);
+    router.postAction(Action::Navigate, QStringLiteral("down"), false, Source::Gamepad);
+    router.dispatch(Action::Accept, {}, Source::Remote);   // dropped, silently
+    router.postGuideHeld(Source::Gamepad);
+    QCoreApplication::processEvents();
+    qInstallMessageHandler(previous);
+    QLoggingCategory::setFilterRules(QString());
+
+    QVERIFY2(capturedLog.isEmpty(), qPrintable(capturedLog.join(QLatin1Char('|'))));
+    QCOMPARE(received.count(), 1);    // nothing new
+    QCOMPARE(triggered.count(), 1 + 4);   // the entry itself still gets its input
+}
+
+void TestInputRouter::deviceNamesAreSanitised()
+{
+    InputRouter router;
+    QSignalSpy devices(&router, &InputRouter::deviceChanged);
+    router.postDeviceNotice(true, 1, QStringLiteral("Evil\u202E\u0007 <b>Pad</b>\n\u200Bx"), Source::Gamepad, false);
+    router.postDeviceNotice(true, 2, QStringLiteral("\u0001\u200F"), Source::Remote, false);
+    QTRY_COMPARE(devices.count(), 2);
+    QCOMPARE(devices.at(0).at(1).toString(), QStringLiteral("Evil <b>Pad</b> x"));
+    QCOMPARE(devices.at(1).at(1).toString(), QStringLiteral("TV remote"));   // nothing left
+}
+
+void TestInputRouter::sanitiseLabels_data()
+{
+    QTest::addColumn<QString>("in");
+    QTest::addColumn<QString>("out");
+    QTest::newRow("plain") << QStringLiteral("Xbox Series X Controller") << QStringLiteral("Xbox Series X Controller");
+    QTest::newRow("c0") << QStringLiteral("A\u0000B\u001bC") << QStringLiteral("ABC");
+    QTest::newRow("del-c1") << QStringLiteral("A\u007fB\u0085C\u009bD") << QStringLiteral("ABCD");
+    QTest::newRow("bidi") << QStringLiteral("\u202Edap\u202C \u2066x\u2069\u200E\u200F\u061C")
+                          << QStringLiteral("dap x");
+    QTest::newRow("zero-width") << QStringLiteral("P\u200Ba\u200Cd\u200D\u2060\uFEFF") << QStringLiteral("Pad");
+    QTest::newRow("whitespace") << QStringLiteral("  a \t\n b\u2028c  ") << QStringLiteral("a b c");
+    QTest::newRow("markup stays text") << QStringLiteral("<img src=x><b>x</b>") << QStringLiteral("<img src=x><b>x</b>");
+    QTest::newRow("emoji kept") << QStringLiteral("Pad \U0001F3AE") << QStringLiteral("Pad \U0001F3AE");
+    QTest::newRow("cap") << QString(100, QLatin1Char('a')) << QString(64, QLatin1Char('a'));
+    // The cap never splits a surrogate pair.
+    QTest::newRow("cap-surrogate") << QString(63, QLatin1Char('a')) + QStringLiteral("\U0001F3AE\U0001F3AE")
+                                   << QString(63, QLatin1Char('a')) + QStringLiteral("\U0001F3AE");
+}
+
+void TestInputRouter::sanitiseLabels()
+{
+    QFETCH(QString, in);
+    QFETCH(QString, out);
+    QCOMPARE(TextSanitize::label(in), out);
+}
+
+void TestInputRouter::escapeForTerminal()
+{
+    QCOMPARE(TextSanitize::escapeForTerminal(QStringLiteral("a\u001b[31mb\\\"\u202E")),
+             QStringLiteral("a\\x1b[31mb\\\\\\\"\\u{202e}"));
+    QCOMPARE(TextSanitize::escapeForTerminal(QStringLiteral("Xbox \u00e9")), QStringLiteral("Xbox \u00e9"));
 }
 
 QTEST_MAIN(TestInputRouter)

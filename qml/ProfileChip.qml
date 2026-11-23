@@ -35,6 +35,7 @@ Item {
             }
         }
         Text {
+            textFormat: Text.PlainText
             anchors.verticalCenter: parent.verticalCenter
             text: chip._profile.name ?? ""
             color: Theme.textDim
@@ -49,6 +50,7 @@ Item {
             radius: height / 2
             color: chip._profile.color ?? Theme.accent
             Text {
+                textFormat: Text.PlainText
                 id: kidsText
                 anchors.centerIn: parent
                 text: qsTr("Kids")

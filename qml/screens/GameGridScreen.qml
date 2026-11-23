@@ -33,10 +33,11 @@ NavScreen {
         if (focusedCanFavorite)
             list.push({ action: InputRouter.Favorite, label: qsTr("Favorite") })
         list.push({ action: InputRouter.Options, label: qsTr("Options") },
-                  { action: InputRouter.PageDown, label: qsTr("Page"), pad: "LT RT", key: qsTr("Home End") })
+                  { action: InputRouter.PageDown, label: qsTr("Page"),
+                    actions: [InputRouter.PageUp, InputRouter.PageDown] })
         if (_isSystem)
             list.push({ action: InputRouter.NextCategory, label: qsTr("System"),
-                        pad: "LB RB", key: qsTr("PgUp PgDn") })
+                        actions: [InputRouter.PrevCategory, InputRouter.NextCategory] })
         return list
     }
 

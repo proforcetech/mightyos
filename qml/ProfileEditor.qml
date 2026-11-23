@@ -178,12 +178,14 @@ Item {
                 Column {
                     anchors.verticalCenter: parent.verticalCenter
                     Text {
+                        textFormat: Text.PlainText
                         text: editor.mode === "create" ? qsTr("New profile") : qsTr("Edit profile")
                         color: Theme.textDim
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSmall
                     }
                     Text {
+                        textFormat: Text.PlainText
                         text: nameRow.currentId + (kindRow.currentId === "kids" ? "  ·  " + qsTr("Kids") : "")
                         color: Theme.text
                         font.family: Theme.fontFamily
@@ -228,6 +230,7 @@ Item {
                 onFocusRequested: editor.focusRow = 3
             }
             Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 visible: kindRow.currentId === "kids"
                 wrapMode: Text.Wrap
@@ -259,6 +262,7 @@ Item {
                         border.color: focused ? Theme.accent : Theme.surfaceHigh
 
                         Text {
+                            textFormat: Text.PlainText
                             id: buttonLabel
                             anchors.centerIn: parent
                             text: button.modelData
