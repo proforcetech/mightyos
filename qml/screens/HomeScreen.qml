@@ -1,19 +1,25 @@
 import QtQuick
 import MightyOS.Core
 import MightyOS.UI
-import "../mock/MockData.js" as Mock
+import "../Catalog.js" as Catalog
 
-// Home: category bar (row 0) and the focused category's content (row 1).
+// Home: category bar (row 0), the focused category's content (row 1) and,
+// on Favorites only, a small "Recent" row (row 2).
 //
 //   [Favorites] [Emulators] [Games] [Media] [App Store] [Settings]   row 0
 //   Emulators - Retro and modern consoles                           (info)
 //   [NES] [SNES] [N64] [PS1] [PS2] ...                               row 1
+//   Recent  [game] [app] ...          (Favorites only, if non-empty) row 2
 //
-// Up/Down moves between the rows, Left/Right within one, LB/RB (PgUp/PgDn)
-// switches category from either row, Back in row 1 returns to the bar.
-// Accept on a category opens its screen; on a content tile it opens or
-// launches that tile. Each category remembers its content position, and
-// those positions are part of the saved path (extra.positions).
+// Up/Down moves between the rows (empty rows are skipped), Left/Right
+// within one, LB/RB (PgUp/PgDn) switches category from any row, Back in
+// row 1/2 returns to the bar. Accept on a category opens its screen; on a
+// content tile it opens or launches that tile. Each category remembers its
+// content position, and those positions are part of the saved path
+// (extra.positions).
+//
+// Content models are the C++ ones: Favorites.model, Library.systems(),
+// AppRegistry.media, static TileListModels for Store/Settings.
 NavScreen {
     id: home
 
@@ -27,19 +33,37 @@ NavScreen {
     // True while the content row swaps models (its index passes through
     // a transient 0 that must not be remembered or persisted).
     property bool _switching: false
+    // The user is working in the content rows: LB/RB through a category
+    // with no content drops to the bar, the next one with content brings
+    // the focus back down.
+    property bool _preferContent: false
+
+    readonly property bool _recentShown: _shownCategory === "favorites" && recent.count > 0
 
     // Info area above the content row. Only re-evaluates when the focused
     // item changes, not per frame.
-    readonly property var _category: focusRow === 0 && focusedItem ? Mock.category(focusedItem.itemId) : null
-    readonly property string _infoTitle: focusedItem ? focusedItem.label : ""
-    readonly property string _infoText: _category ? _category.blurb
-                                        : (focusedItem ? focusedItem.subtitle : "")
+    readonly property var _category: focusRow === 0 && focusedItem ? Catalog.category(focusedItem.key) : null
+    readonly property string _infoTitle: focusedItem ? focusedItem.title : ""
+    readonly property string _infoText: {
+        if (_category) {
+            if (_category.key === "favorites" && Favorites.count === 0)
+                return qsTr("Press X (F) on any game, app or system to pin it here")
+            if (_category.key === "media" && AppRegistry.media.count === 0)
+                return qsTr("No media apps installed yet")
+            return _category.blurb
+        }
+        if (!focusedItem)
+            return ""
+        return focusedItem.available === false ? qsTr("Unavailable") : focusedItem.subtitle
+    }
 
-    // Rebuilt only when the row or the accept label actually changes.
+    // Rebuilt only when the row, the accept label or "can favorite" changes.
     prompts: {
         const list = [{ action: InputRouter.Accept, label: focusedAcceptLabel }]
-        if (focusRow === 1)
+        if (focusRow > 0)
             list.push({ action: InputRouter.Back, label: qsTr("Categories") })
+        if (focusedCanFavorite)
+            list.push({ action: InputRouter.Favorite, label: qsTr("Favorite") })
         list.push({ action: InputRouter.Options, label: qsTr("Options") },
                   { action: InputRouter.NextCategory, label: qsTr("Category"),
                     pad: "LB RB", key: qsTr("PgUp PgDn") })
@@ -51,20 +75,41 @@ NavScreen {
         navStateChanged()
     }
 
+    function _view(rowIndex: int): var {
+        return rowIndex === 0 ? bar : rowIndex === 1 ? content : recent
+    }
+
+    function _rowUsable(rowIndex: int): bool {
+        if (rowIndex === 1)
+            return content.count > 0
+        if (rowIndex === 2)
+            return _recentShown
+        return rowIndex === 0
+    }
+
     function _updateFocused() {
-        let item = null
-        if (focusRow === 0) {
-            if (bar.currentIndex >= 0 && bar.currentIndex < bar.count)
-                item = categoryModel.get(bar.currentIndex)
-        } else if (content.currentIndex >= 0 && content.currentIndex < content.count) {
-            item = content.model.get(content.currentIndex)
-        }
-        if (item !== focusedItem)
+        const item = _view(focusRow).currentEntry()
+        if (JSON.stringify(item) !== JSON.stringify(focusedItem))
             focusedItem = item
     }
 
+    function focusedInFavoritesList(): bool {
+        return focusRow === 1 && _shownCategory === "favorites"
+    }
+
+    function extraOptions(): var {
+        return [{ id: "profiles", label: qsTr("Switch profile") }]
+    }
+
+    function extraOptionChosen(id: string): bool {
+        if (id !== "profiles")
+            return false
+        profilePickerRequested()
+        return true
+    }
+
     function _currentPosition(): var {
-        return { index: content.currentIndex, key: content.keyAt(content.currentIndex) }
+        return { index: content.savedIndex(), key: content.savedKey() }
     }
 
     function _rememberPosition() {
@@ -83,42 +128,42 @@ NavScreen {
         const position = _positions[id]
         content.restoreFocus(position ? position.index : 0, position ? position.key : "")
         _switching = false
-        if (content.count === 0 && focusRow === 1)
+        if (!_rowUsable(focusRow))
             focusRow = 0
+        if (focusRow === 0 && _preferContent && content.count > 0)
+            focusRow = 1
         _updateFocused()
+    }
+
+    function _moveVertical(direction: string): bool {
+        const step = direction === "down" ? 1 : -1
+        for (let r = focusRow + step; r >= 0 && r <= 2; r += step) {
+            if (_rowUsable(r)) {
+                focusRow = r
+                _preferContent = r > 0
+                SoundFx.play(SoundFx.Move)
+                return true
+            }
+        }
+        return false
     }
 
     function handleAction(action: int, arg: string): bool {
         switch (action) {
         case InputRouter.Navigate:
-            if (arg === "down" && focusRow === 0) {
-                if (content.count > 0) {
-                    focusRow = 1
-                    SoundFx.play(SoundFx.Move)
-                }
+            if (arg === "up" || arg === "down") {
+                _moveVertical(arg)   // nothing above the bar / below the last row
                 return true
             }
-            if (arg === "up" && focusRow === 1) {
-                focusRow = 0
-                SoundFx.play(SoundFx.Move)
-                return true
-            }
-            if (arg === "up" || arg === "down")
-                return true   // nothing above the bar / below the content
-            if (focusRow === 0)
-                bar.moveFocus(arg)
-            else
-                content.moveFocus(arg)
+            _view(focusRow).moveFocus(arg)
             return true
         case InputRouter.Accept:
-            if (focusRow === 0)
-                bar.activateCurrent()
-            else
-                content.activateCurrent()
+            _view(focusRow).activateCurrent()
             return true
         case InputRouter.Back:
-            if (focusRow === 1) {
+            if (focusRow > 0) {
                 focusRow = 0
+                _preferContent = false
                 SoundFx.play(SoundFx.Back)
                 return true
             }
@@ -134,15 +179,15 @@ NavScreen {
     }
 
     function saveState(): var {
-        const view = focusRow === 0 ? bar : content
+        const view = _view(focusRow)
         // No side effects: called on every persist.
         const positions = Object.assign({}, _positions)
         if (_shownCategory.length > 0 && content.currentIndex >= 0 && !_switching)
             positions[_shownCategory] = _currentPosition()
         return {
             row: focusRow,
-            index: Math.max(0, view.currentIndex),
-            key: view.keyAt(view.currentIndex),
+            index: view.savedIndex(),
+            key: view.savedKey(),
             extra: { category: _shownCategory, positions: positions }
         }
     }
@@ -165,39 +210,53 @@ NavScreen {
         if (state.row === 1 && content.count > 0) {
             content.restoreFocus(state.index, state.key)
             focusRow = 1
+        } else if (state.row === 2 && _recentShown) {
+            recent.restoreFocus(state.index, state.key)
+            focusRow = 2
         } else {
             focusRow = 0
         }
+        _preferContent = focusRow > 0
+        _updateFocused()
     }
 
     function wheel(steps: int) {
-        if (focusRow === 0)
-            bar.wheelStep(steps)
-        else
-            content.wheelStep(steps)
+        _view(focusRow).wheelStep(steps)
     }
 
-    ListModel { id: categoryModel }
-    // One model per category, built on first use. Swapping models (rather
-    // than clear() + append() on a shared one) never pulls rows out from
-    // under delegates the row is still incubating.
-    property var _contentModels: ({})
-    Component { id: contentModelComponent; ListModel {} }
+    TileListModel { id: categoryModel }
+    TileListModel { id: storeModel }
+    TileListModel { id: settingsModel }
 
     function _contentModelFor(id: string): var {
-        let model = _contentModels[id]
-        if (!model) {
-            model = contentModelComponent.createObject(home) as ListModel
-            model.append(Mock.contentRows(id))
-            _contentModels[id] = model
+        switch (id) {
+        case "favorites": return Favorites.model
+        case "emulators":
+        case "games":     return Library.systems(id)
+        case "media":     return AppRegistry.media
+        case "store":     return storeModel
+        case "settings":  return settingsModel
         }
-        return model
+        return null
     }
 
     Component.onCompleted: {
-        categoryModel.append(Mock.categoryRows())
+        categoryModel.setRows(Catalog.categoryRows())
+        storeModel.setRows(Catalog.sectionRows("store"))
+        settingsModel.setRows(Catalog.sectionRows("settings"))
         bar.currentIndex = 0
         _showCategory()
+    }
+
+    // The Favorites row or Recent row can empty out under the focus
+    // (removing the last favorite, a re-scan): fall back to a usable row.
+    Connections {
+        target: content
+        function onCountChanged() {
+            if (!home._switching && home.focusRow === 1 && content.count === 0)
+                home.focusRow = home._recentShown ? 2 : 0
+            home._updateFocused()
+        }
     }
 
     Column {
@@ -218,7 +277,10 @@ NavScreen {
                     home._updateFocused()
                     home.navStateChanged()
                 }
-                onFocusRequested: home.focusRow = 0
+                onFocusRequested: {
+                    home.focusRow = 0
+                    home._preferContent = false
+                }
                 onActivated: (index) => home.activateItem(categoryModel.get(index))
             }
         }
@@ -235,6 +297,8 @@ NavScreen {
 
             TileRow {
                 id: content
+                objectName: "homeContent"
+                keepPendingKey: home._shownCategory === "media"
                 anchors.verticalCenter: parent.verticalCenter
                 active: home.focusShown && home.focusRow === 1
                 onCurrentIndexChanged: {
@@ -243,8 +307,58 @@ NavScreen {
                     home._updateFocused()
                     home.navStateChanged()
                 }
-                onFocusRequested: home.focusRow = 1
+                onCurrentItemChanged: {
+                    if (!home._switching)
+                        home._updateFocused()
+                }
+                onCurrentDataChanged: home._updateFocused()
+                onFocusRequested: {
+                    home.focusRow = 1
+                    home._preferContent = true
+                }
                 onActivated: (index) => home.activateItem(content.model.get(index))
+            }
+        }
+
+        Text {
+            visible: home._recentShown
+            text: qsTr("Recent")
+            color: Theme.textDim
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSmall
+            font.weight: Font.DemiBold
+        }
+
+        Item {
+            visible: home._recentShown
+            width: parent.width
+            height: recent.height + 2 * Theme.overflowFor(recent.tileHeight)
+
+            TileRow {
+                id: recent
+                objectName: "homeRecent"
+                keepPendingKey: true
+                anchors.verticalCenter: parent.verticalCenter
+                model: History.recent
+                tileWidth: Theme.recentTileSize
+                tileHeight: Theme.recentTileSize
+                spacing: Theme.spacingS
+                active: home.focusShown && home.focusRow === 2
+                onCurrentIndexChanged: {
+                    home._updateFocused()
+                    home.navStateChanged()
+                }
+                onCurrentItemChanged: home._updateFocused()
+                onCurrentDataChanged: home._updateFocused()
+                onFocusRequested: {
+                    home.focusRow = 2
+                    home._preferContent = true
+                }
+                onActivated: (index) => home.activateItem(History.recent.get(index))
+                onCountChanged: {
+                    if (count === 0 && home.focusRow === 2)
+                        home.focusRow = content.count > 0 ? 1 : 0
+                }
             }
         }
     }

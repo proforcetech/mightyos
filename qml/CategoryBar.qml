@@ -6,7 +6,7 @@ import QtQuick
 // behave exactly like every other row. The current category stays marked
 // (tinted icon, filled pill) while focus is in the content below.
 //
-// Model contract: TileRow's (itemId, label, icon, tint).
+// Model contract: TileRow's (a TileListModel: key, title, icon, tint).
 TileRow {
     id: bar
 
@@ -14,6 +14,7 @@ TileRow {
     tileHeight: Theme.pillHeight
     width: parent ? parent.width : 0
     spacing: Theme.spacingS
+    showFavorites: false
 
     delegate: Item {
         id: pill
@@ -50,7 +51,7 @@ TileRow {
             }
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                text: pill.model.label ?? ""
+                text: pill.model.title ?? ""
                 color: pill.current ? Theme.text : Theme.textDim
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontLabel

@@ -1,30 +1,37 @@
 import QtQuick
 import MightyOS.Core
 import MightyOS.UI
-import "../mock/MockData.js" as Mock
+import "../Catalog.js" as Catalog
 
-// Placeholder screen for Media / App Store / Settings: one TileRow with the
-// category's mock content. The real screens arrive in M5 (Media), M7
-// (App Store) and M8 (Settings).
+// One TileRow for Media / App Store / Settings. Media lists the media apps
+// AppRegistry found (.desktop files and manifests); App Store and Settings
+// are placeholders until M7 / M8, except Settings > Profiles (the profile
+// picker) and Settings > All apps.
 //
 // params: { category: "media" | "store" | "settings" }
 NavScreen {
     id: categoryScreen
 
-    readonly property var _category: Mock.category(params.category ?? "")
+    readonly property var _category: Catalog.category(params.category ?? "")
     readonly property var _milestone: ({ media: "M5", store: "M7", settings: "M8" })
+    readonly property bool _isMedia: params.category === "media"
 
-    title: _category ? _category.label : ""
+    title: _category ? _category.title : ""
     valid: _category !== null && _milestone[params.category] !== undefined
 
-    prompts: [
-        { action: InputRouter.Accept, label: focusedAcceptLabel },
-        { action: InputRouter.Back, label: qsTr("Back") },
-        { action: InputRouter.Options, label: qsTr("Options") }
-    ]
+    prompts: {
+        const list = [
+            { action: InputRouter.Accept, label: focusedAcceptLabel },
+            { action: InputRouter.Back, label: qsTr("Back") }
+        ]
+        if (focusedCanFavorite)
+            list.push({ action: InputRouter.Favorite, label: qsTr("Favorite") })
+        list.push({ action: InputRouter.Options, label: qsTr("Options") })
+        return list
+    }
 
     function _updateFocused() {
-        focusedItem = row.currentIndex >= 0 && row.currentIndex < row.count ? itemModel.get(row.currentIndex) : null
+        focusedItem = row.currentEntry()
     }
 
     function handleAction(action: int, arg: string): bool {
@@ -40,7 +47,7 @@ NavScreen {
     }
 
     function saveState(): var {
-        return { row: 0, index: Math.max(0, row.currentIndex), key: row.keyAt(row.currentIndex), extra: {} }
+        return { row: 0, index: row.savedIndex(), key: row.savedKey(), extra: {} }
     }
 
     function restoreState(state: var) {
@@ -51,12 +58,14 @@ NavScreen {
         row.wheelStep(steps)
     }
 
-    ListModel { id: itemModel }
+    TileListModel { id: sectionModel }
 
     Component.onCompleted: {
         if (!valid)
             return
-        itemModel.append(Mock.contentRows(params.category))
+        if (!_isMedia)
+            sectionModel.setRows(Catalog.sectionRows(params.category))
+        row.model = _isMedia ? AppRegistry.media : sectionModel
         row.currentIndex = 0
         _updateFocused()
     }
@@ -67,9 +76,18 @@ NavScreen {
 
         InfoHeader {
             width: parent.width
-            heading: categoryScreen.title
-            detail: qsTr("Placeholder. The full %1 screen arrives in %2.")
+            heading: categoryScreen.focusedItem ? categoryScreen.focusedItem.title : categoryScreen.title
+            detail: {
+                if (categoryScreen._isMedia) {
+                    if (row.count === 0)
+                        return qsTr("No media apps found. Kodi, Jellyfin, Plex and friends show up here once installed.")
+                    return categoryScreen.focusedItem && categoryScreen.focusedItem.subtitle.length > 0
+                        ? categoryScreen.focusedItem.subtitle
+                        : qsTr("Installed media apps. Streaming and web-app tiles arrive in M5.")
+                }
+                return qsTr("Placeholder. The full %1 screen arrives in %2.")
                     .arg(categoryScreen.title).arg(categoryScreen._milestone[categoryScreen.params.category] ?? "")
+            }
         }
 
         Item {
@@ -79,13 +97,15 @@ NavScreen {
             TileRow {
                 id: row
                 anchors.verticalCenter: parent.verticalCenter
-                model: itemModel
                 active: categoryScreen.focusShown
+                keepPendingKey: categoryScreen._isMedia
+                onCurrentDataChanged: categoryScreen._updateFocused()
                 onCurrentIndexChanged: {
                     categoryScreen._updateFocused()
                     categoryScreen.navStateChanged()
                 }
-                onActivated: (index) => categoryScreen.activateItem(itemModel.get(index))
+                onCurrentItemChanged: categoryScreen._updateFocused()
+                onActivated: (index) => categoryScreen.activateItem(row.model.get(index))
             }
         }
     }

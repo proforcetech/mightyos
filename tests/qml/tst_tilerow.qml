@@ -11,7 +11,7 @@ Item {
     width: 1600
     height: 700
 
-    ListModel { id: rowModel }
+    TileListModel { id: rowModel }
 
     TileRow {
         id: row
@@ -22,7 +22,7 @@ Item {
     }
 
     // A row long enough to scroll (about 4 of 15 tiles visible).
-    ListModel { id: longModel }
+    TileListModel { id: longModel }
     TileRow {
         id: longRow
         x: 50
@@ -36,6 +36,7 @@ Item {
     Icon { id: probeIcon; x: 1500; y: 0; width: 64; height: 64; name: "settings" }
 
     SignalSpy { id: activatedSpy; target: row; signalName: "activated" }
+    Component { id: spyComponent; SignalSpy {} }
     SignalSpy { id: focusSpy; target: row; signalName: "focusRequested" }
     SignalSpy { id: actionSpy; target: InputRouter; signalName: "triggered" }
 
@@ -48,7 +49,7 @@ Item {
             InputRouter.muteFor(0)
             rowModel.clear()
             for (let i = 0; i < 5; ++i)
-                rowModel.append({ itemId: "item" + i, label: "Item " + i, icon: "games", tint: "#4da3ff" })
+                rowModel.appendRow({ key: "item" + i, title: "Item " + i, icon: "games", tint: "#4da3ff" })
             row.currentIndex = 0
             row.active = true
             tryCompare(row, "bumping", false)
@@ -132,7 +133,7 @@ Item {
         function test_restingCursorAfterScroll() {
             longModel.clear()
             for (let i = 0; i < 15; ++i)
-                longModel.append({ itemId: "long" + i, label: "Long " + i, icon: "games", tint: "#4da3ff" })
+                longModel.appendRow({ key: "long" + i, title: "Long " + i, icon: "games", tint: "#4da3ff" })
             longRow.currentIndex = 0
             longRow.positionViewAtBeginning()
             const tile = longRow.itemAtIndex(1)
@@ -208,6 +209,48 @@ Item {
             compare(row.keyAt(2), "item2")
             compare(row.indexOfKey("item4"), 4)
             compare(row.indexOfKey("nope"), -1)
+        }
+
+        // A saved key that isn't in the model yet (apps before the first
+        // scan): the fallback tile is shown, the saved position is kept,
+        // and the tile takes the focus once it shows up.
+        function test_pendingKeyMechanics() {
+            row.restoreFocus(3, "item3")
+            compare(row.savedKey(), "item3")
+            row._pendingKey = "late"                 // what restoreFocus keeps while !AppRegistry.ready
+            row._pendingIndex = 6
+            compare(row.savedKey(), "late")
+            compare(row.savedIndex(), 6)
+            rowModel.appendRow({ key: "late", title: "Late", icon: "games" })
+            tryCompare(row, "currentIndex", 5)        // the view applies inserts at its next layout
+            compare(row.savedKey(), "late")
+            compare(row._pendingKey, "")
+            // A user move drops a pending key.
+            row._pendingKey = "never"
+            row.moveFocus("left")
+            compare(row._pendingKey, "")
+            compare(row.savedKey(), "item4")
+        }
+
+        // After the registry is ready, a missing key is gone: plain clamp.
+        function test_missingKeyClampsAfterScan() {
+            tryVerify(() => AppRegistry.ready, 5000)
+            row.keepPendingKey = true
+            row.restoreFocus(2, "uninstalled")
+            compare(row.currentIndex, 2)
+            compare(row.savedKey(), "item2")
+            row.keepPendingKey = false
+        }
+
+        function test_dataChangeUnderFocusIsSignalled() {
+            const spy = createTemporaryObject(spyComponent, root, { target: row, signalName: "currentDataChanged" })
+            row.currentIndex = 1
+            const rows = []
+            for (let i = 0; i < 5; ++i)
+                rows.push({ key: "item" + i, title: i === 1 ? "Renamed" : "Item " + i, icon: "games" })
+            rowModel.setRows(rows)                   // same keys: in-place dataChanged
+            compare(spy.count, 1)
+            compare(row.currentEntry().title, "Renamed")
         }
 
         function test_activateCurrent() {

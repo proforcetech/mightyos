@@ -144,7 +144,9 @@ bool Launcher::launch(const QString &id, const QStringList &argv)
     const QProcessEnvironment env = buildChildEnvironment(QProcessEnvironment::systemEnvironment());
     const QString program = resolveProgram(argv.first(), env);
     if (program.isEmpty()) {
-        qCWarning(lcLauncher) << "launch" << id << "- program not found:" << argv.first();
+        // Ids only in logs, never argv (PLAN section 4); the program name
+        // is shown to the user in the toast, not logged.
+        qCWarning(lcLauncher) << "launch" << id << "- program not found";
         emit failed(id, tr("Program not found: %1").arg(argv.first()));
         return false;
     }
@@ -183,7 +185,7 @@ bool Launcher::launch(const QString &id, const QStringList &argv)
             return;
         const QString id = m_currentId;
         const QString message = process->errorString();
-        qCWarning(lcLauncher) << "failed to start" << id << message;
+        qCWarning(lcLauncher) << "failed to start" << id;
         finish();
         emit failed(id, message);
     });
@@ -203,7 +205,7 @@ bool Launcher::launch(const QString &id, const QStringList &argv)
     setCurrentId(id);
     setRunning(true);
 
-    qCInfo(lcLauncher) << "launching" << id << program;
+    qCInfo(lcLauncher) << "launching" << id;
     process->start();
 
     // start() may fail synchronously; errorOccurred has then already run

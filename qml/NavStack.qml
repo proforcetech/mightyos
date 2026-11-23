@@ -21,7 +21,8 @@ Item {
 
     // name -> Component whose root is a NavScreen.
     property var registry: ({})
-    // Selects the navstate file. Empty until profiles exist (M2).
+    // Selects the navstate file (profiles/<id>/navstate.json). Main sets it
+    // to ProfileService.activeId before restore().
     property string profileId: ""
     // False while a modal or the launch overlay owns input.
     property bool focusShown: true
@@ -40,6 +41,7 @@ Item {
     signal toastRequested(string message, bool isError)
     signal dialogRequested(var spec)
     signal optionsRequested(string title, var items)
+    signal profilePickerRequested()
 
     // Returns the new screen, or null if `name` is unknown or the screen
     // reports itself invalid for `params`.
@@ -171,7 +173,7 @@ Item {
     }
 
     // Drops every screen (after writing any pending state). Used before
-    // restoring a different path, e.g. on a profile switch (M2).
+    // restoring a different path, e.g. on a profile switch.
     function reset() {
         NavState.flush()
         const old = _screens
@@ -199,7 +201,10 @@ Item {
         if (depth === 0)
             push("home", {}, false)
         _restoring = false
-        persist()   // write back the cleaned-up path
+        // Write back the cleaned-up path, but not before the first app scan:
+        // app-backed positions may only be pending, not gone.
+        if (AppRegistry.ready)
+            persist()
     }
 
     function _create(name: string, params: var): NavScreen {
@@ -238,7 +243,8 @@ Item {
             },
             launch: item => stack.launchRequested(item),
             toast: (message, isError) => stack.toastRequested(message, isError),
-            dialog: spec => stack.dialogRequested(spec)
+            dialog: spec => stack.dialogRequested(spec),
+            profiles: () => stack.profilePickerRequested()
         }
         screen.navStateChanged.connect(handlers.navState)
         screen.openRequested.connect(handlers.open)
@@ -246,6 +252,7 @@ Item {
         screen.launchRequested.connect(handlers.launch)
         screen.toastRequested.connect(handlers.toast)
         screen.dialogRequested.connect(handlers.dialog)
+        screen.profilePickerRequested.connect(handlers.profiles)
         screen._stackConnections = handlers
     }
 
@@ -260,6 +267,7 @@ Item {
         screen.launchRequested.disconnect(handlers.launch)
         screen.toastRequested.disconnect(handlers.toast)
         screen.dialogRequested.disconnect(handlers.dialog)
+        screen.profilePickerRequested.disconnect(handlers.profiles)
     }
 
     // A screen leaving the stack: no input, no signals, while it animates out.

@@ -41,8 +41,9 @@ public:
     // also emits failed(), so QML only needs to listen to the signal.
     Q_INVOKABLE bool launch(const QString &id, const QStringList &argv);
 
-    // M0 only: argv of a harmless GUI program to use as a launch target.
-    // Empty if nothing suitable was found. Replaced by AppRegistry in M2.
+    // argv of the bundled test program, the launch target for (mock)
+    // games until the real library arrives in M4. Apps launch with the
+    // argv AppRegistry parsed. Empty if the test program is missing.
     Q_INVOKABLE QStringList testAppCommand() const;
 
     // Exposed for unit tests.

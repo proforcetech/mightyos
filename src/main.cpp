@@ -5,6 +5,7 @@
 #include <QWindow>
 #include <QtQml/qqmlextensionplugin.h>
 
+#include "artworkprovider.h"
 #include "inputrouter.h"
 
 #include <cstdio>
@@ -46,6 +47,8 @@ int main(int argc, char *argv[])
     QQmlApplicationEngine engine;
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                      [] { QCoreApplication::exit(EXIT_FAILURE); }, Qt::QueuedConnection);
+    // image://art/... (app icons, decoded off the GUI thread, disk-cached).
+    ArtworkProvider::install(&engine);
     engine.setInitialProperties({ { QStringLiteral("startFullscreen"), fullscreen } });
     engine.loadFromModule("MightyOS.UI", "Main");
     if (engine.rootObjects().isEmpty())

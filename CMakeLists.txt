@@ -31,7 +31,7 @@ if(CMAKE_GENERATOR MATCHES "Ninja")
     set(CMAKE_JOB_POOL_COMPILE mightyos_compile)
 endif()
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Qml Quick)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Qml Quick Concurrent)
 qt_standard_project_setup(REQUIRES 6.8)
 # Each QML module gets <dir>/MightyOS/<Name>, which qmllint and qmlcachegen
 # use as their import path.
@@ -68,9 +68,27 @@ qt_add_qml_module(mightyos_core
         src/inputrouter.h src/inputrouter.cpp
         src/navstate.h src/navstate.cpp
         src/soundfx.h src/soundfx.cpp
+        src/ids.h src/ids.cpp
+        src/jsonfile.h src/jsonfile.cpp
+        src/tilelistmodel.h src/tilelistmodel.cpp
+        src/itemresolver.h
+        src/library.h src/library.cpp
+        src/desktopentry.h src/desktopentry.cpp
+        src/iconlocator.h src/iconlocator.cpp
+        src/appscanner.h src/appscanner.cpp
+        src/appregistry.h src/appregistry.cpp
+        src/artworkprovider.h src/artworkprovider.cpp
+        src/profileservice.h src/profileservice.cpp
+        src/favorites.h src/favorites.cpp
+        src/history.h src/history.cpp
 )
+# Mock library (systems + games) until the real library arrives in M4.
+qt_add_resources(mightyos_core "mightyos_mockdata"
+    PREFIX /mightyos/mock
+    BASE data/mock
+    FILES data/mock/library.json)
 target_include_directories(mightyos_core PUBLIC src)
-target_link_libraries(mightyos_core PUBLIC Qt6::Core Qt6::Gui Qt6::Qml)
+target_link_libraries(mightyos_core PUBLIC Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Concurrent)
 mightyos_set_warnings(mightyos_core)
 
 # ---------------------------------------------------------------------------
@@ -112,7 +130,12 @@ qt_add_qml_module(mightyos_ui
         qml/screens/SystemListScreen.qml
         qml/screens/GameGridScreen.qml
         qml/screens/CategoryScreen.qml
-        qml/mock/MockData.js
+        qml/screens/AppListScreen.qml
+        qml/ProfilePicker.qml
+        qml/ProfileEditor.qml
+        qml/ChoiceRow.qml
+        qml/ProfileChip.qml
+        qml/Catalog.js
 )
 target_link_libraries(mightyos_ui PRIVATE Qt6::Quick mightyos_core)
 mightyos_set_warnings(mightyos_ui)
@@ -132,8 +155,8 @@ target_link_libraries(mightyos PRIVATE
 mightyos_set_warnings(mightyos)
 
 # ---------------------------------------------------------------------------
-# mightyos-testapp: tiny GUI program used as the M0 launch target.
-# Dev/test only; replaced by real apps from AppRegistry in M2.
+# mightyos-testapp: tiny GUI program, the launch target for mock games until
+# the real library (M4) and for the tests. Dev/test only.
 # ---------------------------------------------------------------------------
 qt_add_executable(mightyos-testapp
     testapp/main.cpp
@@ -158,13 +181,20 @@ if(MIGHTYOS_BUILD_TESTS)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Test QuickTest)
     enable_testing()
 
-    # Tests never touch the real ~/.local/state, and every run starts from
-    # an empty state dir (fixture below runs first).
-    set(_test_state "${CMAKE_BINARY_DIR}/test-state")
+    # Tests never touch the real XDG dirs (~/.config, ~/.local/share,
+    # ~/.local/state, ~/.cache), and every run starts from empty ones (the
+    # fixture below runs first). XDG_DATA_DIRS points at an empty dir too,
+    # so the system's .desktop files don't leak into the results.
+    set(_test_xdg "${CMAKE_BINARY_DIR}/test-xdg")
     set(_test_env
         "QT_QPA_PLATFORM=offscreen"
-        "XDG_STATE_HOME=${_test_state}")
-    add_test(NAME clear_test_state COMMAND ${CMAKE_COMMAND} -E rm -rf "${_test_state}")
+        "XDG_STATE_HOME=${_test_xdg}/state"
+        "XDG_CONFIG_HOME=${_test_xdg}/config"
+        "XDG_DATA_HOME=${_test_xdg}/data"
+        "XDG_CACHE_HOME=${_test_xdg}/cache"
+        "XDG_DATA_DIRS=${_test_xdg}/system"
+        "XDG_CURRENT_DESKTOP=MightyOS")
+    add_test(NAME clear_test_state COMMAND ${CMAKE_COMMAND} -E rm -rf "${_test_xdg}")
     set_tests_properties(clear_test_state PROPERTIES FIXTURES_SETUP test_state)
 
     function(mightyos_add_test name)
@@ -184,6 +214,12 @@ if(MIGHTYOS_BUILD_TESTS)
 
     mightyos_add_test(tst_inputrouter LIBS Qt6::Quick)
     mightyos_add_test(tst_navstate)
+    mightyos_add_test(tst_tilelistmodel)
+    mightyos_add_test(tst_desktopentry)
+    mightyos_add_test(tst_appregistry)
+    mightyos_add_test(tst_profiles)
+    mightyos_add_test(tst_favorites)
+    mightyos_add_test(tst_artwork LIBS Qt6::Quick)
 
     # Qt Quick Test: components, NavStack and the whole Main window
     # (tests/qml/tst_*.qml). tst_main launches the test app.

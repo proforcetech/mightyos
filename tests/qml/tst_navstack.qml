@@ -14,6 +14,7 @@ Item {
     Component { id: systemListScreen; SystemListScreen {} }
     Component { id: gameGridScreen; GameGridScreen {} }
     Component { id: categoryScreen; CategoryScreen {} }
+    Component { id: appListScreen; AppListScreen {} }
 
     Component {
         id: stackComponent
@@ -24,7 +25,8 @@ Item {
                 home: homeScreen,
                 systems: systemListScreen,
                 games: gameGridScreen,
-                category: categoryScreen
+                category: categoryScreen,
+                apps: appListScreen
             })
         }
     }
@@ -285,15 +287,17 @@ Item {
             compare(home.saveState().key, "ps2")
             home.handleAction(InputRouter.NextCategory, "")          // Games
             home.handleAction(InputRouter.NextCategory, "")          // Media
-            home.handleAction(InputRouter.Navigate, "right")         // Jellyfin
+            home.handleAction(InputRouter.NextCategory, "")          // App Store
+            home.handleAction(InputRouter.Navigate, "right")         // store:games
             stack.persistNow()
             stack.destroy()
             makeStack().restore()
             const restored = stack.current
-            compare(restored.saveState().extra.category, "media")
+            compare(restored.saveState().extra.category, "store")
             compare(restored.saveState().index, 1)
-            restored.handleAction(InputRouter.PrevCategory, "")
-            restored.handleAction(InputRouter.PrevCategory, "")      // back to Emulators
+            compare(restored.saveState().key, "store:games")
+            for (let i = 0; i < 3; ++i)
+                restored.handleAction(InputRouter.PrevCategory, "")  // back to Emulators
             compare(restored.saveState().key, "ps2")
         }
 

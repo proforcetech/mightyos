@@ -63,6 +63,9 @@ public:
     Q_INVOKABLE void saveLater(const QVariantList &path, const QString &profileId = QString());
     // Writes a pending saveLater() now. Called on quit.
     Q_INVOKABLE void flush();
+    // Drops a pending saveLater() for `profileId` without writing it (the
+    // profile was deleted: a late write would recreate its directory).
+    Q_INVOKABLE void discard(const QString &profileId);
 
     // Exposed for tests: validates and normalises a JSON path array.
     static QVariantList sanitize(const QJsonArray &path);

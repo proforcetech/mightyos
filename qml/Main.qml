@@ -7,15 +7,22 @@ import MightyOS.Core
 //
 // Input: InputRouter (C++) filters the window's key and mouse-button events
 // and emits `triggered`. route() sends each action to the first open modal
-// (Dialog, then ContextMenu: focus trap), else to the NavStack, which
-// offers it to the top screen and then applies its defaults.
+// (Dialog, then ContextMenu: focus trap, then the ProfilePicker), else to
+// the NavStack, which offers it to the top screen and then applies its
+// defaults.
+//
+// Profiles: with exactly one profile MightyOS goes straight to Home; with
+// 2+ the picker is shown first, the last used profile preselected.
+// Choosing another profile resets the NavStack and restores that
+// profile's saved path (profiles/<id>/navstate.json).
 Window {
     id: window
 
     property bool startFullscreen: false
-    // M1: the argv every game/app launches (the bundled test app). Real
-    // commands come from AppRegistry (M2) and the library (M4). Tests set
-    // it to run the test app offscreen / with --crash.
+    // The argv every *game* launches (the bundled test app) until the real
+    // library arrives in M4. Apps launch with the argv AppRegistry parsed
+    // from their .desktop file / manifest. Tests set it to run the test app
+    // offscreen / with --crash.
     property var launchCommand: Launcher.testAppCommand()
 
     // The screen and focus state to return to when the running app exits.
@@ -25,7 +32,9 @@ Window {
     property string launchIcon
     property bool launchStarted: false
 
-    readonly property bool modalOpen: dialog.open || contextMenu.open
+    readonly property bool modalOpen: dialog.open || contextMenu.open || picker.open
+    // Who asked for the open context menu (the NavStack or the picker).
+    property Item _menuOwner: null
 
     width: 1280
     height: 720
@@ -50,6 +59,10 @@ Window {
             contextMenu.handleAction(action, arg)
             return
         }
+        if (picker.open) {
+            picker.handleAction(action, arg)
+            return
+        }
         if (navStack.handleAction(action, arg))
             return
         // Global fallbacks for features that arrive later; every input gets
@@ -70,18 +83,68 @@ Window {
     function launch(item: var) {
         if (Launcher.running)
             return   // never clobber the running app's launch state
-        const argv = launchCommand
+        const argv = item.kind === "app" ? AppRegistry.command(item.key) : launchCommand
         if (!argv || argv.length === 0) {
-            toast.show(qsTr("No test application found on this system"), true)
+            if (item.kind === "app" && !AppRegistry.ready)
+                toast.show(qsTr("Still looking for apps, try %1 again in a moment").arg(item.title), false)
+            else
+                toast.show(item.kind === "app" ? qsTr("%1 is no longer installed").arg(item.title)
+                                               : qsTr("No test application found on this system"), true)
             return
         }
         launchScreen = navStack.current
         launchState = navStack.current ? navStack.current.saveState() : null
-        launchTitle = item.label
+        launchTitle = item.title
         launchIcon = item.icon
         launchStarted = false
         navStack.persistNow()
-        Launcher.launch(item.itemId, argv)
+        Launcher.launch(item.key, argv)
+    }
+
+    // Makes `id` the active profile and rebuilds its navigation.
+    function enterProfile(id: string) {
+        // Drop the old profile's screens first (reset() writes its pending
+        // path under its own id). Only then switch: Favorites/History reset
+        // their models on activeChanged, and live screens would react by
+        // persisting their fallback focus into the old profile's file.
+        navStack.reset()
+        ProfileService.select(id)          // stamps lastUsed
+        navStack.profileId = ProfileService.activeId
+        navStack.restore()                 // that profile's path
+    }
+
+    // The picker is about to delete `id`. If it is the profile on screen,
+    // its screens go first (same reason as above), so nothing writes into
+    // the directories being removed.
+    function _profileRemoving(id: string) {
+        if (id === navStack.profileId)
+            navStack.reset()
+    }
+
+    function openProfilePicker() {
+        if (Launcher.running || picker.open)
+            return
+        navStack.persistNow()              // the current profile's position is saved
+        picker.show(false)
+    }
+
+    function _pickerChosen(id: string) {
+        picker.close()
+        const switching = id !== navStack.profileId || navStack.depth === 0
+        if (!switching) {
+            ProfileService.select(id)
+            return
+        }
+        const wasStartup = navStack.depth === 0
+        enterProfile(id)
+        if (!wasStartup)
+            toast.show(qsTr("Playing as %1").arg(ProfileService.active.name ?? ""), false)
+    }
+
+    // Back from the picker: stay, unless the current profile was deleted.
+    function _pickerClosed() {
+        if (navStack.profileId !== ProfileService.activeId || navStack.depth === 0)
+            enterProfile(ProfileService.activeId)
     }
 
     function _returnFromLaunch() {
@@ -99,9 +162,18 @@ Window {
     }
 
     Connections {
+        target: ProfileService
+        // A late debounced save would recreate a deleted profile's dir.
+        function onProfileRemoved(id) {
+            NavState.discard(id)
+        }
+    }
+
+    Connections {
         target: Launcher
         function onLaunched(id) {
             window.launchStarted = true
+            History.record(id)             // only successful launches count
         }
         function onExited(id, exitCode) {
             InputRouter.muteFor(Theme.inputMuteAfterExit)
@@ -127,12 +199,18 @@ Window {
             clock.refresh()
     }
 
-    Component.onCompleted: navStack.restore()
+    Component.onCompleted: {
+        if (ProfileService.pickerAtStartup)
+            picker.show(true)
+        else
+            enterProfile(ProfileService.activeId)
+    }
 
     Component { id: homeScreen; HomeScreen {} }
     Component { id: systemListScreen; SystemListScreen {} }
     Component { id: gameGridScreen; GameGridScreen {} }
     Component { id: categoryScreen; CategoryScreen {} }
+    Component { id: appListScreen; AppListScreen {} }
 
     Item {
         id: inputRoot
@@ -174,10 +252,21 @@ Window {
                     id: breadcrumb
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
-                    crumbs: navStack.crumbs
+                    crumbs: picker.open ? [qsTr("MightyOS"), qsTr("Profiles")] : navStack.crumbs
                     onCrumbClicked: (depth) => {
                         if (!window.modalOpen)
                             navStack.popTo(depth)
+                    }
+                }
+                ProfileChip {
+                    id: profileChip
+                    visible: !picker.open
+                    anchors.right: clock.left
+                    anchors.rightMargin: Theme.spacingL
+                    anchors.verticalCenter: parent.verticalCenter
+                    onClicked: {
+                        if (!window.modalOpen)
+                            window.openProfilePicker()
                     }
                 }
                 Clock {
@@ -198,7 +287,7 @@ Window {
 
             NavStack {
                 id: navStack
-            objectName: "navStack"
+                objectName: "navStack"
                 anchors {
                     left: parent.left; right: parent.right
                     top: topBar.bottom; bottom: promptArea.top
@@ -208,18 +297,39 @@ Window {
                     home: homeScreen,
                     systems: systemListScreen,
                     games: gameGridScreen,
-                    category: categoryScreen
+                    category: categoryScreen,
+                    apps: appListScreen
                 })
+                visible: !picker.open
                 focusShown: !window.modalOpen && !Launcher.running
                 onLaunchRequested: (item) => window.launch(item)
                 onToastRequested: (message, isError) => toast.show(message, isError)
                 onDialogRequested: (spec) => dialog.show(spec)
-                onOptionsRequested: (title, items) => contextMenu.show(title, items)
+                onOptionsRequested: (title, items) => {
+                    window._menuOwner = navStack
+                    contextMenu.show(title, items)
+                }
+                onProfilePickerRequested: window.openProfilePicker()
+            }
+
+            ProfilePicker {
+                id: picker
+                objectName: "profilePicker"
+                anchors.fill: navStack
+                onChosen: (id) => window._pickerChosen(id)
+                onRemoving: (id) => window._profileRemoving(id)
+                onClosed: window._pickerClosed()
+                onToastRequested: (message, isError) => toast.show(message, isError)
+                onDialogRequested: (spec) => dialog.show(spec)
+                onOptionsRequested: (title, items) => {
+                    window._menuOwner = picker
+                    contextMenu.show(title, items)
+                }
             }
 
             Toast {
                 id: toast
-            objectName: "toast"
+                objectName: "toast"
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: promptArea.top
                 anchors.bottomMargin: Theme.spacingM
@@ -239,7 +349,14 @@ Window {
             id: contextMenu
             objectName: "contextMenu"
             anchors.fill: parent
-            onChosen: (id) => navStack.optionChosen(id)
+            onChosen: (id) => {
+                const owner = window._menuOwner
+                window._menuOwner = null
+                if (owner === picker)
+                    picker.optionChosen(id)
+                else
+                    navStack.optionChosen(id)
+            }
         }
 
         Dialog {
@@ -254,6 +371,7 @@ Window {
             anchors.bottom: safeArea.bottom
             prompts: dialog.open ? dialog.prompts
                    : contextMenu.open ? contextMenu.prompts
+                   : picker.open ? picker.prompts
                    : navStack.current ? navStack.current.prompts : []
         }
 

@@ -107,6 +107,62 @@ const table = {
         d: "M14 2 A10 10 0 1 0 22 14 A8 8 0 1 1 14 2 Z",
         oddEven: false
     },
+    "apps": {        // 2x2 grid of tiles
+        d: "M4 4 H10 V10 H4 Z M14 4 H20 V10 H14 Z M4 14 H10 V20 H4 Z M14 14 H20 V20 H14 Z",
+        oddEven: false
+    },
+    "add": {
+        d: "M11 4 H13 V11 H20 V13 H13 V20 H11 V13 H4 V11 H11 Z",
+        oddEven: false
+    },
+    "profile": {     // head and shoulders
+        d: "M12 3 A4.5 4.5 0 1 0 12 12 A4.5 4.5 0 1 0 12 3 Z M3 21 C3 16.5 7 14 12 14 C17 14 21 16.5 21 21 Z",
+        oddEven: false
+    },
+    // Profile avatars (ProfileService::avatars(): "avatar-" + name).
+    "avatar-robot": {
+        d: "M11 2 H13 V5 H17 A3 3 0 0 1 20 8 V15 A3 3 0 0 1 17 18 H7 A3 3 0 0 1 4 15 V8 A3 3 0 0 1 7 5 H11 Z "
+         + "M8.5 8.5 A1.6 1.6 0 1 0 8.5 11.7 A1.6 1.6 0 1 0 8.5 8.5 Z "
+         + "M15.5 8.5 A1.6 1.6 0 1 0 15.5 11.7 A1.6 1.6 0 1 0 15.5 8.5 Z "
+         + "M9 14 H15 V15.5 H9 Z M1.5 9.5 H3.2 V13.5 H1.5 Z M20.8 9.5 H22.5 V13.5 H20.8 Z M8 19.5 H16 V22 H8 Z",
+        oddEven: true
+    },
+    "avatar-cat": {
+        d: "M4 3 L9 8 H15 L20 3 V13 A8 8 0 0 1 4 13 Z "
+         + "M8 11 A1.4 1.4 0 1 0 8 13.8 A1.4 1.4 0 1 0 8 11 Z "
+         + "M16 11 A1.4 1.4 0 1 0 16 13.8 A1.4 1.4 0 1 0 16 11 Z M10.5 16 H13.5 L12 17.6 Z",
+        oddEven: true
+    },
+    "avatar-ghost": {
+        d: "M12 2 A8 8 0 0 1 20 10 V21 L17.33 19 L14.67 21 L12 19 L9.33 21 L6.67 19 L4 21 V10 A8 8 0 0 1 12 2 Z "
+         + "M9 8 A1.6 2 0 1 0 9 12 A1.6 2 0 1 0 9 8 Z M15 8 A1.6 2 0 1 0 15 12 A1.6 2 0 1 0 15 8 Z",
+        oddEven: true
+    },
+    "avatar-rocket": {
+        d: "M12 2 C15.5 4.5 17 8.5 16 14 H8 C7 8.5 8.5 4.5 12 2 Z "
+         + "M12 6.8 A1.8 1.8 0 1 0 12 10.4 A1.8 1.8 0 1 0 12 6.8 Z "
+         + "M7.4 11.5 L4.5 15 V18.5 L7.8 15.2 Z M16.6 11.5 L19.5 15 V18.5 L16.2 15.2 Z M10 15.2 H14 L12 21.5 Z",
+        oddEven: true
+    },
+    "avatar-alien": {
+        d: "M12 2 C17 2 20 5.5 20 10 C20 15 15 21 12 22 C9 21 4 15 4 10 C4 5.5 7 2 12 2 Z "
+         + "M6.5 10 C8 9.5 10 10.5 10.5 13 C9 13.5 7 12.5 6.5 10 Z "
+         + "M17.5 10 C16 9.5 14 10.5 13.5 13 C15 13.5 17 12.5 17.5 10 Z",
+        oddEven: true
+    },
+    "avatar-bolt": {
+        d: "M13 2 L4 14 H11 L10 22 L20 9 H13 Z",
+        oddEven: false
+    },
+    "avatar-heart": {
+        d: "M12 21 L10.6 19.7 C5.4 15 2 11.9 2 8.1 C2 5 4.4 2.6 7.5 2.6 C9.2 2.6 10.9 3.4 12 4.7 "
+         + "C13.1 3.4 14.8 2.6 16.5 2.6 C19.6 2.6 22 5 22 8.1 C22 11.9 18.6 15 13.4 19.7 Z",
+        oddEven: false
+    },
+    "avatar-crown": {
+        d: "M3 7 L8 12 L12 5 L16 12 L21 7 L19 18 H5 Z M5 19.5 H19 V21.5 H5 Z",
+        oddEven: false
+    },
     "placeholder": {
         d: "M4 4 H20 V20 H4 Z M6 6 V18 H18 V6 Z",
         oddEven: true

@@ -1,0 +1,1988 @@
+{
+ "version": 1,
+ "comment": "Mock library (M2). Same ids and structure as the M1 mock; replaced by systems.d + RomScanner/SQLite and the Steam .acf parser in M4.",
+ "systems": [
+  {
+   "id": "nes",
+   "label": "NES",
+   "fullName": "Nintendo Entertainment System",
+   "category": "emulators",
+   "icon": "cartridge",
+   "tint": "#e05a5a"
+  },
+  {
+   "id": "snes",
+   "label": "SNES",
+   "fullName": "Super Nintendo",
+   "category": "emulators",
+   "icon": "cartridge",
+   "tint": "#9b8cff"
+  },
+  {
+   "id": "n64",
+   "label": "N64",
+   "fullName": "Nintendo 64",
+   "category": "emulators",
+   "icon": "cartridge",
+   "tint": "#4fc06a"
+  },
+  {
+   "id": "ps1",
+   "label": "PS1",
+   "fullName": "PlayStation",
+   "category": "emulators",
+   "icon": "disc",
+   "tint": "#b0b8c8"
+  },
+  {
+   "id": "ps2",
+   "label": "PS2",
+   "fullName": "PlayStation 2",
+   "category": "emulators",
+   "icon": "disc",
+   "tint": "#5a7dff"
+  },
+  {
+   "id": "psp",
+   "label": "PSP",
+   "fullName": "PlayStation Portable",
+   "category": "emulators",
+   "icon": "handheld",
+   "tint": "#8fa3bf"
+  },
+  {
+   "id": "gamecube",
+   "label": "GameCube",
+   "fullName": "Nintendo GameCube",
+   "category": "emulators",
+   "icon": "disc",
+   "tint": "#8a6bd1"
+  },
+  {
+   "id": "genesis",
+   "label": "Genesis",
+   "fullName": "Sega Genesis / Mega Drive",
+   "category": "emulators",
+   "icon": "cartridge",
+   "tint": "#3d8bff"
+  },
+  {
+   "id": "arcade",
+   "label": "Arcade",
+   "fullName": "Arcade (MAME / FBNeo)",
+   "category": "emulators",
+   "icon": "arcade",
+   "tint": "#ffb347"
+  },
+  {
+   "id": "steam",
+   "label": "Steam",
+   "fullName": "Steam library",
+   "category": "games",
+   "icon": "steam",
+   "tint": "#66c0f4"
+  }
+ ],
+ "games": {
+  "nes": [
+   {
+    "id": "rom:nes:aa529728",
+    "title": "Aero Blaster Zero",
+    "year": 1995
+   },
+   {
+    "id": "rom:nes:264a7441",
+    "title": "Alpine Rally",
+    "year": 2005
+   },
+   {
+    "id": "rom:nes:4bdde1ba",
+    "title": "Astro Miner",
+    "year": 1999
+   },
+   {
+    "id": "rom:nes:b606c2a5",
+    "title": "Battle Kart Deluxe",
+    "year": 2005
+   },
+   {
+    "id": "rom:nes:9ab1f90d",
+    "title": "Blade of Dawn",
+    "year": 1993
+   },
+   {
+    "id": "rom:nes:3dd62d3a",
+    "title": "Bubble Harbor",
+    "year": 1994
+   },
+   {
+    "id": "rom:nes:1b4b1a94",
+    "title": "Castle Climber",
+    "year": 2002
+   },
+   {
+    "id": "rom:nes:80667063",
+    "title": "Chrono Pilot",
+    "year": 1989
+   },
+   {
+    "id": "rom:nes:14c0894f",
+    "title": "Cosmic Courier",
+    "year": 2004
+   },
+   {
+    "id": "rom:nes:4a06d806",
+    "title": "Crystal Caverns",
+    "year": 1990
+   },
+   {
+    "id": "rom:nes:9960fcc4",
+    "title": "Dragon Valley",
+    "year": 1999
+   },
+   {
+    "id": "rom:nes:095076aa",
+    "title": "Dune Runner",
+    "year": 1986
+   },
+   {
+    "id": "rom:nes:54d2e50c",
+    "title": "Echo Knight",
+    "year": 1987
+   },
+   {
+    "id": "rom:nes:b105b7b1",
+    "title": "Fable Forest",
+    "year": 1995
+   },
+   {
+    "id": "rom:nes:41d8970a",
+    "title": "Galaxy Golf",
+    "year": 1989
+   },
+   {
+    "id": "rom:nes:20f7b2a6",
+    "title": "Gear Hunters",
+    "year": 1997
+   },
+   {
+    "id": "rom:nes:c365c81e",
+    "title": "Haunted Hallways",
+    "year": 2004
+   },
+   {
+    "id": "rom:nes:11f570c0",
+    "title": "Hyper Striker",
+    "year": 2006
+   },
+   {
+    "id": "rom:nes:1bb47180",
+    "title": "Iron Orbit",
+    "year": 1986
+   },
+   {
+    "id": "rom:nes:bafd55ff",
+    "title": "Jungle Jam",
+    "year": 1987
+   },
+   {
+    "id": "rom:nes:491a110c",
+    "title": "Kingdom of Keys",
+    "year": 2001
+   },
+   {
+    "id": "rom:nes:f24cbb22",
+    "title": "Lava Leap",
+    "year": 2004
+   },
+   {
+    "id": "rom:nes:3d35dde9",
+    "title": "Lunar Lancer",
+    "year": 2004
+   },
+   {
+    "id": "rom:nes:fd9c8bbc",
+    "title": "Metro Mayhem",
+    "year": 2005
+   },
+   {
+    "id": "rom:nes:8f23b182",
+    "title": "Neon Ninja",
+    "year": 1992
+   },
+   {
+    "id": "rom:nes:900194ca",
+    "title": "Ocean Odyssey",
+    "year": 1992
+   },
+   {
+    "id": "rom:nes:04fdad55",
+    "title": "Pixel Paladin",
+    "year": 1993
+   },
+   {
+    "id": "rom:nes:36653908",
+    "title": "Puzzle Pagoda",
+    "year": 1994
+   },
+   {
+    "id": "rom:nes:6033c059",
+    "title": "Quantum Quest",
+    "year": 1995
+   },
+   {
+    "id": "rom:nes:bcebf2ff",
+    "title": "Retro Rumble",
+    "year": 1989
+   },
+   {
+    "id": "rom:nes:f4eb5733",
+    "title": "Robo Rescue",
+    "year": 2005
+   },
+   {
+    "id": "rom:nes:f9b9c943",
+    "title": "Sky Fortress",
+    "year": 1991
+   },
+   {
+    "id": "rom:nes:b2e89265",
+    "title": "Star Sprinter",
+    "year": 1999
+   },
+   {
+    "id": "rom:nes:b396ae09",
+    "title": "Super Snowball",
+    "year": 2007
+   },
+   {
+    "id": "rom:nes:7216c34b",
+    "title": "Thunder Track",
+    "year": 2001
+   },
+   {
+    "id": "rom:nes:a7d268c9",
+    "title": "Tiny Tactics",
+    "year": 1995
+   },
+   {
+    "id": "rom:nes:29dce26b",
+    "title": "Ultra Uprising",
+    "year": 1988
+   },
+   {
+    "id": "rom:nes:72dfb28c",
+    "title": "Volcano Vault",
+    "year": 2004
+   },
+   {
+    "id": "rom:nes:24623eab",
+    "title": "Wild West Wheels",
+    "year": 2004
+   },
+   {
+    "id": "rom:nes:eda7016a",
+    "title": "Zephyr Zone",
+    "year": 1992
+   }
+  ],
+  "snes": [
+   {
+    "id": "rom:snes:5d6eb12d",
+    "title": "Aero Blaster Zero",
+    "year": 1995
+   },
+   {
+    "id": "rom:snes:2c2ca4fe",
+    "title": "Alpine Rally",
+    "year": 2005
+   },
+   {
+    "id": "rom:snes:50600d37",
+    "title": "Astro Miner",
+    "year": 1999
+   },
+   {
+    "id": "rom:snes:8f236796",
+    "title": "Battle Kart Deluxe",
+    "year": 2005
+   },
+   {
+    "id": "rom:snes:c235dbe4",
+    "title": "Blade of Dawn",
+    "year": 1993
+   },
+   {
+    "id": "rom:snes:82ce1f7b",
+    "title": "Bubble Harbor",
+    "year": 1994
+   },
+   {
+    "id": "rom:snes:e1a2aea3",
+    "title": "Castle Climber",
+    "year": 2002
+   },
+   {
+    "id": "rom:snes:3e1f3a68",
+    "title": "Chrono Pilot",
+    "year": 1989
+   },
+   {
+    "id": "rom:snes:eebe11fc",
+    "title": "Cosmic Courier",
+    "year": 2004
+   },
+   {
+    "id": "rom:snes:6e2b6ac7",
+    "title": "Crystal Caverns",
+    "year": 1990
+   },
+   {
+    "id": "rom:snes:f5c1f38d",
+    "title": "Dragon Valley",
+    "year": 1999
+   },
+   {
+    "id": "rom:snes:8dcba687",
+    "title": "Dune Runner",
+    "year": 1986
+   },
+   {
+    "id": "rom:snes:ed391389",
+    "title": "Echo Knight",
+    "year": 1987
+   },
+   {
+    "id": "rom:snes:01dcfd8e",
+    "title": "Fable Forest",
+    "year": 1995
+   },
+   {
+    "id": "rom:snes:2efa4fe3",
+    "title": "Galaxy Golf",
+    "year": 1989
+   },
+   {
+    "id": "rom:snes:13d734a1",
+    "title": "Gear Hunters",
+    "year": 1997
+   },
+   {
+    "id": "rom:snes:eeaa518d",
+    "title": "Haunted Hallways",
+    "year": 2004
+   },
+   {
+    "id": "rom:snes:2d7cdfe1",
+    "title": "Hyper Striker",
+    "year": 2006
+   },
+   {
+    "id": "rom:snes:05ecc4fb",
+    "title": "Iron Orbit",
+    "year": 1986
+   },
+   {
+    "id": "rom:snes:b8c3f114",
+    "title": "Jungle Jam",
+    "year": 1987
+   },
+   {
+    "id": "rom:snes:30a0e0c5",
+    "title": "Kingdom of Keys",
+    "year": 2001
+   },
+   {
+    "id": "rom:snes:f4c61be7",
+    "title": "Lava Leap",
+    "year": 2004
+   },
+   {
+    "id": "rom:snes:ff426d92",
+    "title": "Lunar Lancer",
+    "year": 2004
+   },
+   {
+    "id": "rom:snes:3ba45ceb",
+    "title": "Metro Mayhem",
+    "year": 2005
+   },
+   {
+    "id": "rom:snes:2c6e7525",
+    "title": "Neon Ninja",
+    "year": 1992
+   },
+   {
+    "id": "rom:snes:7a0fc317",
+    "title": "Ocean Odyssey",
+    "year": 1992
+   },
+   {
+    "id": "rom:snes:3e541b74",
+    "title": "Pixel Paladin",
+    "year": 1993
+   },
+   {
+    "id": "rom:snes:7ac4a169",
+    "title": "Puzzle Pagoda",
+    "year": 1994
+   },
+   {
+    "id": "rom:snes:875c9c18",
+    "title": "Quantum Quest",
+    "year": 1995
+   },
+   {
+    "id": "rom:snes:4e699bd4",
+    "title": "Retro Rumble",
+    "year": 1989
+   },
+   {
+    "id": "rom:snes:3a733e96",
+    "title": "Robo Rescue",
+    "year": 2005
+   },
+   {
+    "id": "rom:snes:37a862ec",
+    "title": "Sky Fortress",
+    "year": 1991
+   },
+   {
+    "id": "rom:snes:51ffb8f4",
+    "title": "Star Sprinter",
+    "year": 1999
+   },
+   {
+    "id": "rom:snes:bd532f9a",
+    "title": "Super Snowball",
+    "year": 2007
+   },
+   {
+    "id": "rom:snes:34e7ad1a",
+    "title": "Thunder Track",
+    "year": 2001
+   },
+   {
+    "id": "rom:snes:d0de20f2",
+    "title": "Tiny Tactics",
+    "year": 1995
+   },
+   {
+    "id": "rom:snes:b67eb470",
+    "title": "Ultra Uprising",
+    "year": 1988
+   },
+   {
+    "id": "rom:snes:73974f49",
+    "title": "Volcano Vault",
+    "year": 2004
+   },
+   {
+    "id": "rom:snes:9f29bfa4",
+    "title": "Wild West Wheels",
+    "year": 2004
+   },
+   {
+    "id": "rom:snes:cffd74b3",
+    "title": "Zephyr Zone",
+    "year": 1992
+   }
+  ],
+  "n64": [
+   {
+    "id": "rom:n64:578f5d02",
+    "title": "Aero Blaster Zero",
+    "year": 1995
+   },
+   {
+    "id": "rom:n64:f0ea90c7",
+    "title": "Alpine Rally",
+    "year": 2005
+   },
+   {
+    "id": "rom:n64:0e5e6848",
+    "title": "Astro Miner",
+    "year": 1999
+   },
+   {
+    "id": "rom:n64:221ef47f",
+    "title": "Battle Kart Deluxe",
+    "year": 2005
+   },
+   {
+    "id": "rom:n64:a26e2fbb",
+    "title": "Blade of Dawn",
+    "year": 1993
+   },
+   {
+    "id": "rom:n64:a6a52ca0",
+    "title": "Bubble Harbor",
+    "year": 1994
+   },
+   {
+    "id": "rom:n64:8c0be73e",
+    "title": "Castle Climber",
+    "year": 2002
+   },
+   {
+    "id": "rom:n64:c4b9b739",
+    "title": "Chrono Pilot",
+    "year": 1989
+   },
+   {
+    "id": "rom:n64:55d6215d",
+    "title": "Cosmic Courier",
+    "year": 2004
+   },
+   {
+    "id": "rom:n64:c8b0dca0",
+    "title": "Crystal Caverns",
+    "year": 1990
+   },
+   {
+    "id": "rom:n64:f2b434aa",
+    "title": "Dragon Valley",
+    "year": 1999
+   },
+   {
+    "id": "rom:n64:2491fb60",
+    "title": "Dune Runner",
+    "year": 1986
+   },
+   {
+    "id": "rom:n64:601858e2",
+    "title": "Echo Knight",
+    "year": 1987
+   },
+   {
+    "id": "rom:n64:db770ad7",
+    "title": "Fable Forest",
+    "year": 1995
+   },
+   {
+    "id": "rom:n64:59a34f44",
+    "title": "Galaxy Golf",
+    "year": 1989
+   },
+   {
+    "id": "rom:n64:414eb980",
+    "title": "Gear Hunters",
+    "year": 1997
+   },
+   {
+    "id": "rom:n64:05c37318",
+    "title": "Haunted Hallways",
+    "year": 2004
+   },
+   {
+    "id": "rom:n64:75929a1e",
+    "title": "Hyper Striker",
+    "year": 2006
+   },
+   {
+    "id": "rom:n64:2c32937e",
+    "title": "Iron Orbit",
+    "year": 1986
+   },
+   {
+    "id": "rom:n64:20baab45",
+    "title": "Jungle Jam",
+    "year": 1987
+   },
+   {
+    "id": "rom:n64:1c89eb86",
+    "title": "Kingdom of Keys",
+    "year": 2001
+   },
+   {
+    "id": "rom:n64:f4e75970",
+    "title": "Lava Leap",
+    "year": 2004
+   },
+   {
+    "id": "rom:n64:d195af4b",
+    "title": "Lunar Lancer",
+    "year": 2004
+   },
+   {
+    "id": "rom:n64:149cd8aa",
+    "title": "Metro Mayhem",
+    "year": 2005
+   },
+   {
+    "id": "rom:n64:89f4f590",
+    "title": "Neon Ninja",
+    "year": 1992
+   },
+   {
+    "id": "rom:n64:a807bc9c",
+    "title": "Ocean Odyssey",
+    "year": 1992
+   },
+   {
+    "id": "rom:n64:dc41238b",
+    "title": "Pixel Paladin",
+    "year": 1993
+   },
+   {
+    "id": "rom:n64:826b16e2",
+    "title": "Puzzle Pagoda",
+    "year": 1994
+   },
+   {
+    "id": "rom:n64:cd67c433",
+    "title": "Quantum Quest",
+    "year": 1995
+   },
+   {
+    "id": "rom:n64:c1ff9b11",
+    "title": "Retro Rumble",
+    "year": 1989
+   },
+   {
+    "id": "rom:n64:5bce17f9",
+    "title": "Robo Rescue",
+    "year": 2005
+   },
+   {
+    "id": "rom:n64:f0a0d3a9",
+    "title": "Sky Fortress",
+    "year": 1991
+   },
+   {
+    "id": "rom:n64:9bf8a4ef",
+    "title": "Star Sprinter",
+    "year": 1999
+   },
+   {
+    "id": "rom:n64:e32e9c43",
+    "title": "Super Snowball",
+    "year": 2007
+   },
+   {
+    "id": "rom:n64:306e2f59",
+    "title": "Thunder Track",
+    "year": 2001
+   },
+   {
+    "id": "rom:n64:e7fb85bf",
+    "title": "Tiny Tactics",
+    "year": 1995
+   },
+   {
+    "id": "rom:n64:0fd17085",
+    "title": "Ultra Uprising",
+    "year": 1988
+   },
+   {
+    "id": "rom:n64:37cb4eb6",
+    "title": "Volcano Vault",
+    "year": 2004
+   },
+   {
+    "id": "rom:n64:53fcb4cd",
+    "title": "Wild West Wheels",
+    "year": 2004
+   },
+   {
+    "id": "rom:n64:356b7ec0",
+    "title": "Zephyr Zone",
+    "year": 1992
+   }
+  ],
+  "ps1": [
+   {
+    "id": "rom:ps1:3e93b33e",
+    "title": "Aero Blaster Zero",
+    "year": 1995
+   },
+   {
+    "id": "rom:ps1:a51dfe4b",
+    "title": "Alpine Rally",
+    "year": 2005
+   },
+   {
+    "id": "rom:ps1:76b310e4",
+    "title": "Astro Miner",
+    "year": 1999
+   },
+   {
+    "id": "rom:ps1:12bd47eb",
+    "title": "Battle Kart Deluxe",
+    "year": 2005
+   },
+   {
+    "id": "rom:ps1:672f8b0f",
+    "title": "Blade of Dawn",
+    "year": 1993
+   },
+   {
+    "id": "rom:ps1:32c2fe64",
+    "title": "Bubble Harbor",
+    "year": 1994
+   },
+   {
+    "id": "rom:ps1:96ed41ea",
+    "title": "Castle Climber",
+    "year": 2002
+   },
+   {
+    "id": "rom:ps1:2c6e7f65",
+    "title": "Chrono Pilot",
+    "year": 1989
+   },
+   {
+    "id": "rom:ps1:a886da01",
+    "title": "Cosmic Courier",
+    "year": 2004
+   },
+   {
+    "id": "rom:ps1:b9a0732c",
+    "title": "Crystal Caverns",
+    "year": 1990
+   },
+   {
+    "id": "rom:ps1:8712a6ae",
+    "title": "Dragon Valley",
+    "year": 1999
+   },
+   {
+    "id": "rom:ps1:18e73014",
+    "title": "Dune Runner",
+    "year": 1986
+   },
+   {
+    "id": "rom:ps1:130a049e",
+    "title": "Echo Knight",
+    "year": 1987
+   },
+   {
+    "id": "rom:ps1:9bcafa0b",
+    "title": "Fable Forest",
+    "year": 1995
+   },
+   {
+    "id": "rom:ps1:820fa3a8",
+    "title": "Galaxy Golf",
+    "year": 1989
+   },
+   {
+    "id": "rom:ps1:9dbbbebc",
+    "title": "Gear Hunters",
+    "year": 1997
+   },
+   {
+    "id": "rom:ps1:146c8734",
+    "title": "Haunted Hallways",
+    "year": 2004
+   },
+   {
+    "id": "rom:ps1:c3036c8a",
+    "title": "Hyper Striker",
+    "year": 2006
+   },
+   {
+    "id": "rom:ps1:6af390ea",
+    "title": "Iron Orbit",
+    "year": 1986
+   },
+   {
+    "id": "rom:ps1:495860d1",
+    "title": "Jungle Jam",
+    "year": 1987
+   },
+   {
+    "id": "rom:ps1:14ff05ea",
+    "title": "Kingdom of Keys",
+    "year": 2001
+   },
+   {
+    "id": "rom:ps1:13277e64",
+    "title": "Lava Leap",
+    "year": 2004
+   },
+   {
+    "id": "rom:ps1:eaa60977",
+    "title": "Lunar Lancer",
+    "year": 2004
+   },
+   {
+    "id": "rom:ps1:42d9de5e",
+    "title": "Metro Mayhem",
+    "year": 2005
+   },
+   {
+    "id": "rom:ps1:fdfe3c9c",
+    "title": "Neon Ninja",
+    "year": 1992
+   },
+   {
+    "id": "rom:ps1:23d81ab0",
+    "title": "Ocean Odyssey",
+    "year": 1992
+   },
+   {
+    "id": "rom:ps1:7f9efd37",
+    "title": "Pixel Paladin",
+    "year": 1993
+   },
+   {
+    "id": "rom:ps1:4b915d76",
+    "title": "Puzzle Pagoda",
+    "year": 1994
+   },
+   {
+    "id": "rom:ps1:74f584b7",
+    "title": "Quantum Quest",
+    "year": 1995
+   },
+   {
+    "id": "rom:ps1:1cf34695",
+    "title": "Retro Rumble",
+    "year": 1989
+   },
+   {
+    "id": "rom:ps1:7e7d4555",
+    "title": "Robo Rescue",
+    "year": 2005
+   },
+   {
+    "id": "rom:ps1:b2b60975",
+    "title": "Sky Fortress",
+    "year": 1991
+   },
+   {
+    "id": "rom:ps1:af269ee3",
+    "title": "Star Sprinter",
+    "year": 1999
+   },
+   {
+    "id": "rom:ps1:a83e3817",
+    "title": "Super Snowball",
+    "year": 2007
+   },
+   {
+    "id": "rom:ps1:63f13c0d",
+    "title": "Thunder Track",
+    "year": 2001
+   },
+   {
+    "id": "rom:ps1:3df28f9b",
+    "title": "Tiny Tactics",
+    "year": 1995
+   },
+   {
+    "id": "rom:ps1:b6335a91",
+    "title": "Ultra Uprising",
+    "year": 1988
+   },
+   {
+    "id": "rom:ps1:a2f3bfd2",
+    "title": "Volcano Vault",
+    "year": 2004
+   },
+   {
+    "id": "rom:ps1:d992e0b9",
+    "title": "Wild West Wheels",
+    "year": 2004
+   },
+   {
+    "id": "rom:ps1:11b42c64",
+    "title": "Zephyr Zone",
+    "year": 1992
+   }
+  ],
+  "ps2": [
+   {
+    "id": "rom:ps2:1fe94f8b",
+    "title": "Aero Blaster Zero",
+    "year": 1995
+   },
+   {
+    "id": "rom:ps2:fb126d40",
+    "title": "Alpine Rally",
+    "year": 2005
+   },
+   {
+    "id": "rom:ps2:86b1f869",
+    "title": "Astro Miner",
+    "year": 1999
+   },
+   {
+    "id": "rom:ps2:6952f3bc",
+    "title": "Battle Kart Deluxe",
+    "year": 2005
+   },
+   {
+    "id": "rom:ps2:6caf1b46",
+    "title": "Blade of Dawn",
+    "year": 1993
+   },
+   {
+    "id": "rom:ps2:66ba524d",
+    "title": "Bubble Harbor",
+    "year": 1994
+   },
+   {
+    "id": "rom:ps2:6bf81239",
+    "title": "Castle Climber",
+    "year": 2002
+   },
+   {
+    "id": "rom:ps2:6d0ab1ba",
+    "title": "Chrono Pilot",
+    "year": 1989
+   },
+   {
+    "id": "rom:ps2:6e01036e",
+    "title": "Cosmic Courier",
+    "year": 2004
+   },
+   {
+    "id": "rom:ps2:fadde0bd",
+    "title": "Crystal Caverns",
+    "year": 1990
+   },
+   {
+    "id": "rom:ps2:a04dfab7",
+    "title": "Dragon Valley",
+    "year": 1999
+   },
+   {
+    "id": "rom:ps2:193842b9",
+    "title": "Dune Runner",
+    "year": 1986
+   },
+   {
+    "id": "rom:ps2:e20c4cdb",
+    "title": "Echo Knight",
+    "year": 1987
+   },
+   {
+    "id": "rom:ps2:3c4137e8",
+    "title": "Fable Forest",
+    "year": 1995
+   },
+   {
+    "id": "rom:ps2:64068009",
+    "title": "Galaxy Golf",
+    "year": 1989
+   },
+   {
+    "id": "rom:ps2:b4a43bbf",
+    "title": "Gear Hunters",
+    "year": 1997
+   },
+   {
+    "id": "rom:ps2:111d8953",
+    "title": "Haunted Hallways",
+    "year": 2004
+   },
+   {
+    "id": "rom:ps2:6ab3d5c3",
+    "title": "Hyper Striker",
+    "year": 2006
+   },
+   {
+    "id": "rom:ps2:3b602a2d",
+    "title": "Iron Orbit",
+    "year": 1986
+   },
+   {
+    "id": "rom:ps2:9f370a76",
+    "title": "Jungle Jam",
+    "year": 1987
+   },
+   {
+    "id": "rom:ps2:dc30ea7b",
+    "title": "Kingdom of Keys",
+    "year": 2001
+   },
+   {
+    "id": "rom:ps2:0125ccd9",
+    "title": "Lava Leap",
+    "year": 2004
+   },
+   {
+    "id": "rom:ps2:70fb2c20",
+    "title": "Lunar Lancer",
+    "year": 2004
+   },
+   {
+    "id": "rom:ps2:ca3c3ced",
+    "title": "Metro Mayhem",
+    "year": 2005
+   },
+   {
+    "id": "rom:ps2:fa8cd877",
+    "title": "Neon Ninja",
+    "year": 1992
+   },
+   {
+    "id": "rom:ps2:9a15568d",
+    "title": "Ocean Odyssey",
+    "year": 1992
+   },
+   {
+    "id": "rom:ps2:4c0d6d4e",
+    "title": "Pixel Paladin",
+    "year": 1993
+   },
+   {
+    "id": "rom:ps2:fab864c7",
+    "title": "Puzzle Pagoda",
+    "year": 1994
+   },
+   {
+    "id": "rom:ps2:c1c2ceb6",
+    "title": "Quantum Quest",
+    "year": 1995
+   },
+   {
+    "id": "rom:ps2:94ce8ca2",
+    "title": "Retro Rumble",
+    "year": 1989
+   },
+   {
+    "id": "rom:ps2:8e675720",
+    "title": "Robo Rescue",
+    "year": 2005
+   },
+   {
+    "id": "rom:ps2:ba2a4b6e",
+    "title": "Sky Fortress",
+    "year": 1991
+   },
+   {
+    "id": "rom:ps2:fb39917a",
+    "title": "Star Sprinter",
+    "year": 1999
+   },
+   {
+    "id": "rom:ps2:cb715020",
+    "title": "Super Snowball",
+    "year": 2007
+   },
+   {
+    "id": "rom:ps2:4919487c",
+    "title": "Thunder Track",
+    "year": 2001
+   },
+   {
+    "id": "rom:ps2:437430fc",
+    "title": "Tiny Tactics",
+    "year": 1995
+   },
+   {
+    "id": "rom:ps2:9e1d7c4e",
+    "title": "Ultra Uprising",
+    "year": 1988
+   },
+   {
+    "id": "rom:ps2:6430e797",
+    "title": "Volcano Vault",
+    "year": 2004
+   },
+   {
+    "id": "rom:ps2:33bba6fa",
+    "title": "Wild West Wheels",
+    "year": 2004
+   },
+   {
+    "id": "rom:ps2:75a8f31d",
+    "title": "Zephyr Zone",
+    "year": 1992
+   }
+  ],
+  "psp": [
+   {
+    "id": "rom:psp:73ded379",
+    "title": "Aero Blaster Zero",
+    "year": 1995
+   },
+   {
+    "id": "rom:psp:dae4fdb2",
+    "title": "Alpine Rally",
+    "year": 2005
+   },
+   {
+    "id": "rom:psp:d40de133",
+    "title": "Astro Miner",
+    "year": 1999
+   },
+   {
+    "id": "rom:psp:99da7d32",
+    "title": "Battle Kart Deluxe",
+    "year": 2005
+   },
+   {
+    "id": "rom:psp:4653cdb8",
+    "title": "Blade of Dawn",
+    "year": 1993
+   },
+   {
+    "id": "rom:psp:f946579f",
+    "title": "Bubble Harbor",
+    "year": 1994
+   },
+   {
+    "id": "rom:psp:2918b11f",
+    "title": "Castle Climber",
+    "year": 2002
+   },
+   {
+    "id": "rom:psp:aab61c34",
+    "title": "Chrono Pilot",
+    "year": 1989
+   },
+   {
+    "id": "rom:psp:a3c71c80",
+    "title": "Cosmic Courier",
+    "year": 2004
+   },
+   {
+    "id": "rom:psp:9bfa1ca3",
+    "title": "Crystal Caverns",
+    "year": 1990
+   },
+   {
+    "id": "rom:psp:2d29d081",
+    "title": "Dragon Valley",
+    "year": 1999
+   },
+   {
+    "id": "rom:psp:a79e90ab",
+    "title": "Dune Runner",
+    "year": 1986
+   },
+   {
+    "id": "rom:psp:c20b98e5",
+    "title": "Echo Knight",
+    "year": 1987
+   },
+   {
+    "id": "rom:psp:e664d662",
+    "title": "Fable Forest",
+    "year": 1995
+   },
+   {
+    "id": "rom:psp:15f1fa27",
+    "title": "Galaxy Golf",
+    "year": 1989
+   },
+   {
+    "id": "rom:psp:a15c3d6d",
+    "title": "Gear Hunters",
+    "year": 1997
+   },
+   {
+    "id": "rom:psp:9aba8839",
+    "title": "Haunted Hallways",
+    "year": 2004
+   },
+   {
+    "id": "rom:psp:3155459d",
+    "title": "Hyper Striker",
+    "year": 2006
+   },
+   {
+    "id": "rom:psp:71b2c0e7",
+    "title": "Iron Orbit",
+    "year": 1986
+   },
+   {
+    "id": "rom:psp:ee819520",
+    "title": "Jungle Jam",
+    "year": 1987
+   },
+   {
+    "id": "rom:psp:6acda0c9",
+    "title": "Kingdom of Keys",
+    "year": 2001
+   },
+   {
+    "id": "rom:psp:30d5ffdb",
+    "title": "Lava Leap",
+    "year": 2004
+   },
+   {
+    "id": "rom:psp:f8761b9e",
+    "title": "Lunar Lancer",
+    "year": 2004
+   },
+   {
+    "id": "rom:psp:7f2845cf",
+    "title": "Metro Mayhem",
+    "year": 2005
+   },
+   {
+    "id": "rom:psp:de053e41",
+    "title": "Neon Ninja",
+    "year": 1992
+   },
+   {
+    "id": "rom:psp:03691d5b",
+    "title": "Ocean Odyssey",
+    "year": 1992
+   },
+   {
+    "id": "rom:psp:7b3b6860",
+    "title": "Pixel Paladin",
+    "year": 1993
+   },
+   {
+    "id": "rom:psp:f76a6fad",
+    "title": "Puzzle Pagoda",
+    "year": 1994
+   },
+   {
+    "id": "rom:psp:4a94132c",
+    "title": "Quantum Quest",
+    "year": 1995
+   },
+   {
+    "id": "rom:psp:db154008",
+    "title": "Retro Rumble",
+    "year": 1989
+   },
+   {
+    "id": "rom:psp:7e336ae2",
+    "title": "Robo Rescue",
+    "year": 2005
+   },
+   {
+    "id": "rom:psp:b7144e28",
+    "title": "Sky Fortress",
+    "year": 1991
+   },
+   {
+    "id": "rom:psp:ed45bd68",
+    "title": "Star Sprinter",
+    "year": 1999
+   },
+   {
+    "id": "rom:psp:1e45f7fe",
+    "title": "Super Snowball",
+    "year": 2007
+   },
+   {
+    "id": "rom:psp:63ce0e5e",
+    "title": "Thunder Track",
+    "year": 2001
+   },
+   {
+    "id": "rom:psp:404ae28e",
+    "title": "Tiny Tactics",
+    "year": 1995
+   },
+   {
+    "id": "rom:psp:556cea7c",
+    "title": "Ultra Uprising",
+    "year": 1988
+   },
+   {
+    "id": "rom:psp:626afc85",
+    "title": "Volcano Vault",
+    "year": 2004
+   },
+   {
+    "id": "rom:psp:fa53c0f0",
+    "title": "Wild West Wheels",
+    "year": 2004
+   },
+   {
+    "id": "rom:psp:fd6b8687",
+    "title": "Zephyr Zone",
+    "year": 1992
+   }
+  ],
+  "gamecube": [
+   {
+    "id": "rom:gamecube:45121643",
+    "title": "Aero Blaster Zero",
+    "year": 1995
+   },
+   {
+    "id": "rom:gamecube:96f5cc08",
+    "title": "Alpine Rally",
+    "year": 2005
+   },
+   {
+    "id": "rom:gamecube:f0c39e41",
+    "title": "Astro Miner",
+    "year": 1999
+   },
+   {
+    "id": "rom:gamecube:9ac24664",
+    "title": "Battle Kart Deluxe",
+    "year": 2005
+   },
+   {
+    "id": "rom:gamecube:98da146e",
+    "title": "Blade of Dawn",
+    "year": 1993
+   },
+   {
+    "id": "rom:gamecube:b4edd1f5",
+    "title": "Bubble Harbor",
+    "year": 1994
+   },
+   {
+    "id": "rom:gamecube:ed1f6c41",
+    "title": "Castle Climber",
+    "year": 2002
+   },
+   {
+    "id": "rom:gamecube:140b7092",
+    "title": "Chrono Pilot",
+    "year": 1989
+   },
+   {
+    "id": "rom:gamecube:7908d746",
+    "title": "Cosmic Courier",
+    "year": 2004
+   },
+   {
+    "id": "rom:gamecube:73137a05",
+    "title": "Crystal Caverns",
+    "year": 1990
+   },
+   {
+    "id": "rom:gamecube:944c581f",
+    "title": "Dragon Valley",
+    "year": 1999
+   },
+   {
+    "id": "rom:gamecube:35499761",
+    "title": "Dune Runner",
+    "year": 1986
+   },
+   {
+    "id": "rom:gamecube:a13c6b73",
+    "title": "Echo Knight",
+    "year": 1987
+   },
+   {
+    "id": "rom:gamecube:8bc84b10",
+    "title": "Fable Forest",
+    "year": 1995
+   },
+   {
+    "id": "rom:gamecube:ec265811",
+    "title": "Galaxy Golf",
+    "year": 1989
+   },
+   {
+    "id": "rom:gamecube:3e3be7a7",
+    "title": "Gear Hunters",
+    "year": 1997
+   },
+   {
+    "id": "rom:gamecube:d830123b",
+    "title": "Haunted Hallways",
+    "year": 2004
+   },
+   {
+    "id": "rom:gamecube:38d4e7fb",
+    "title": "Hyper Striker",
+    "year": 2006
+   },
+   {
+    "id": "rom:gamecube:3430ed45",
+    "title": "Iron Orbit",
+    "year": 1986
+   },
+   {
+    "id": "rom:gamecube:e94aef2e",
+    "title": "Jungle Jam",
+    "year": 1987
+   },
+   {
+    "id": "rom:gamecube:0c767e13",
+    "title": "Kingdom of Keys",
+    "year": 2001
+   },
+   {
+    "id": "rom:gamecube:006d0fb1",
+    "title": "Lava Leap",
+    "year": 2004
+   },
+   {
+    "id": "rom:gamecube:b2e034e8",
+    "title": "Lunar Lancer",
+    "year": 2004
+   },
+   {
+    "id": "rom:gamecube:fa12d635",
+    "title": "Metro Mayhem",
+    "year": 2005
+   },
+   {
+    "id": "rom:gamecube:4f43aeef",
+    "title": "Neon Ninja",
+    "year": 1992
+   },
+   {
+    "id": "rom:gamecube:e9a97535",
+    "title": "Ocean Odyssey",
+    "year": 1992
+   },
+   {
+    "id": "rom:gamecube:336d25e6",
+    "title": "Pixel Paladin",
+    "year": 1993
+   },
+   {
+    "id": "rom:gamecube:a4c7787f",
+    "title": "Puzzle Pagoda",
+    "year": 1994
+   },
+   {
+    "id": "rom:gamecube:18edf02e",
+    "title": "Quantum Quest",
+    "year": 1995
+   },
+   {
+    "id": "rom:gamecube:951b6a5a",
+    "title": "Retro Rumble",
+    "year": 1989
+   },
+   {
+    "id": "rom:gamecube:775b3118",
+    "title": "Robo Rescue",
+    "year": 2005
+   },
+   {
+    "id": "rom:gamecube:42328f66",
+    "title": "Sky Fortress",
+    "year": 1991
+   },
+   {
+    "id": "rom:gamecube:87239b32",
+    "title": "Star Sprinter",
+    "year": 1999
+   },
+   {
+    "id": "rom:gamecube:178c61e8",
+    "title": "Super Snowball",
+    "year": 2007
+   },
+   {
+    "id": "rom:gamecube:313063e4",
+    "title": "Thunder Track",
+    "year": 2001
+   },
+   {
+    "id": "rom:gamecube:b2334f44",
+    "title": "Tiny Tactics",
+    "year": 1995
+   },
+   {
+    "id": "rom:gamecube:4eb9c396",
+    "title": "Ultra Uprising",
+    "year": 1988
+   },
+   {
+    "id": "rom:gamecube:0f411c7f",
+    "title": "Volcano Vault",
+    "year": 2004
+   },
+   {
+    "id": "rom:gamecube:b241c102",
+    "title": "Wild West Wheels",
+    "year": 2004
+   },
+   {
+    "id": "rom:gamecube:e3118e35",
+    "title": "Zephyr Zone",
+    "year": 1992
+   }
+  ],
+  "genesis": [
+   {
+    "id": "rom:genesis:a7da4af4",
+    "title": "Aero Blaster Zero",
+    "year": 1995
+   },
+   {
+    "id": "rom:genesis:759ef675",
+    "title": "Alpine Rally",
+    "year": 2005
+   },
+   {
+    "id": "rom:genesis:7be05966",
+    "title": "Astro Miner",
+    "year": 1999
+   },
+   {
+    "id": "rom:genesis:b2a4d2c1",
+    "title": "Battle Kart Deluxe",
+    "year": 2005
+   },
+   {
+    "id": "rom:genesis:5bf29371",
+    "title": "Blade of Dawn",
+    "year": 1993
+   },
+   {
+    "id": "rom:genesis:0b852ace",
+    "title": "Bubble Harbor",
+    "year": 1994
+   },
+   {
+    "id": "rom:genesis:b195c090",
+    "title": "Castle Climber",
+    "year": 2002
+   },
+   {
+    "id": "rom:genesis:a135250f",
+    "title": "Chrono Pilot",
+    "year": 1989
+   },
+   {
+    "id": "rom:genesis:944595d3",
+    "title": "Cosmic Courier",
+    "year": 2004
+   },
+   {
+    "id": "rom:genesis:e5fb6832",
+    "title": "Crystal Caverns",
+    "year": 1990
+   },
+   {
+    "id": "rom:genesis:ca59b0f8",
+    "title": "Dragon Valley",
+    "year": 1999
+   },
+   {
+    "id": "rom:genesis:9dcf047e",
+    "title": "Dune Runner",
+    "year": 1986
+   },
+   {
+    "id": "rom:genesis:cebf2468",
+    "title": "Echo Knight",
+    "year": 1987
+   },
+   {
+    "id": "rom:genesis:39247495",
+    "title": "Fable Forest",
+    "year": 1995
+   },
+   {
+    "id": "rom:genesis:b33de0ee",
+    "title": "Galaxy Golf",
+    "year": 1989
+   },
+   {
+    "id": "rom:genesis:f1c80e92",
+    "title": "Gear Hunters",
+    "year": 1997
+   },
+   {
+    "id": "rom:genesis:d608b3ea",
+    "title": "Haunted Hallways",
+    "year": 2004
+   },
+   {
+    "id": "rom:genesis:212b352c",
+    "title": "Hyper Striker",
+    "year": 2006
+   },
+   {
+    "id": "rom:genesis:a8949bdc",
+    "title": "Iron Orbit",
+    "year": 1986
+   },
+   {
+    "id": "rom:genesis:3f6af0ab",
+    "title": "Jungle Jam",
+    "year": 1987
+   },
+   {
+    "id": "rom:genesis:0dee0360",
+    "title": "Kingdom of Keys",
+    "year": 2001
+   },
+   {
+    "id": "rom:genesis:ac5cdf66",
+    "title": "Lava Leap",
+    "year": 2004
+   },
+   {
+    "id": "rom:genesis:939fa005",
+    "title": "Lunar Lancer",
+    "year": 2004
+   },
+   {
+    "id": "rom:genesis:93bb9590",
+    "title": "Metro Mayhem",
+    "year": 2005
+   },
+   {
+    "id": "rom:genesis:bfa3cf1e",
+    "title": "Neon Ninja",
+    "year": 1992
+   },
+   {
+    "id": "rom:genesis:f616208e",
+    "title": "Ocean Odyssey",
+    "year": 1992
+   },
+   {
+    "id": "rom:genesis:794b48a1",
+    "title": "Pixel Paladin",
+    "year": 1993
+   },
+   {
+    "id": "rom:genesis:54e6e7cc",
+    "title": "Puzzle Pagoda",
+    "year": 1994
+   },
+   {
+    "id": "rom:genesis:e0ee539d",
+    "title": "Quantum Quest",
+    "year": 1995
+   },
+   {
+    "id": "rom:genesis:c66465b3",
+    "title": "Retro Rumble",
+    "year": 1989
+   },
+   {
+    "id": "rom:genesis:f3df783f",
+    "title": "Robo Rescue",
+    "year": 2005
+   },
+   {
+    "id": "rom:genesis:5aa4182f",
+    "title": "Sky Fortress",
+    "year": 1991
+   },
+   {
+    "id": "rom:genesis:7d923ef9",
+    "title": "Star Sprinter",
+    "year": 1999
+   },
+   {
+    "id": "rom:genesis:33a0b9fd",
+    "title": "Super Snowball",
+    "year": 2007
+   },
+   {
+    "id": "rom:genesis:6986231f",
+    "title": "Thunder Track",
+    "year": 2001
+   },
+   {
+    "id": "rom:genesis:caced8a5",
+    "title": "Tiny Tactics",
+    "year": 1995
+   },
+   {
+    "id": "rom:genesis:31c49717",
+    "title": "Ultra Uprising",
+    "year": 1988
+   },
+   {
+    "id": "rom:genesis:7b550028",
+    "title": "Volcano Vault",
+    "year": 2004
+   },
+   {
+    "id": "rom:genesis:b5216617",
+    "title": "Wild West Wheels",
+    "year": 2004
+   },
+   {
+    "id": "rom:genesis:796e530e",
+    "title": "Zephyr Zone",
+    "year": 1992
+   }
+  ],
+  "arcade": [
+   {
+    "id": "rom:arcade:2b81a8cc",
+    "title": "Aero Blaster Zero",
+    "year": 1995
+   },
+   {
+    "id": "rom:arcade:a7e33efd",
+    "title": "Alpine Rally",
+    "year": 2005
+   },
+   {
+    "id": "rom:arcade:d903c9be",
+    "title": "Astro Miner",
+    "year": 1999
+   },
+   {
+    "id": "rom:arcade:e3279889",
+    "title": "Battle Kart Deluxe",
+    "year": 2005
+   },
+   {
+    "id": "rom:arcade:51ba7839",
+    "title": "Blade of Dawn",
+    "year": 1993
+   },
+   {
+    "id": "rom:arcade:caf9a416",
+    "title": "Bubble Harbor",
+    "year": 1994
+   },
+   {
+    "id": "rom:arcade:13f1f458",
+    "title": "Castle Climber",
+    "year": 2002
+   },
+   {
+    "id": "rom:arcade:2b09f267",
+    "title": "Chrono Pilot",
+    "year": 1989
+   },
+   {
+    "id": "rom:arcade:98e5056b",
+    "title": "Cosmic Courier",
+    "year": 2004
+   },
+   {
+    "id": "rom:arcade:d0ab437a",
+    "title": "Crystal Caverns",
+    "year": 1990
+   },
+   {
+    "id": "rom:arcade:273d3460",
+    "title": "Dragon Valley",
+    "year": 1999
+   },
+   {
+    "id": "rom:arcade:44a64c66",
+    "title": "Dune Runner",
+    "year": 1986
+   },
+   {
+    "id": "rom:arcade:777f18c0",
+    "title": "Echo Knight",
+    "year": 1987
+   },
+   {
+    "id": "rom:arcade:e10dae5d",
+    "title": "Fable Forest",
+    "year": 1995
+   },
+   {
+    "id": "rom:arcade:c369c9d6",
+    "title": "Galaxy Golf",
+    "year": 1989
+   },
+   {
+    "id": "rom:arcade:bb0a24fa",
+    "title": "Gear Hunters",
+    "year": 1997
+   },
+   {
+    "id": "rom:arcade:1e5febb2",
+    "title": "Haunted Hallways",
+    "year": 2004
+   },
+   {
+    "id": "rom:arcade:3b538b84",
+    "title": "Hyper Striker",
+    "year": 2006
+   },
+   {
+    "id": "rom:arcade:4be6abd4",
+    "title": "Iron Orbit",
+    "year": 1986
+   },
+   {
+    "id": "rom:arcade:665a4a03",
+    "title": "Jungle Jam",
+    "year": 1987
+   },
+   {
+    "id": "rom:arcade:da3d6e38",
+    "title": "Kingdom of Keys",
+    "year": 2001
+   },
+   {
+    "id": "rom:arcade:980fbb1e",
+    "title": "Lava Leap",
+    "year": 2004
+   },
+   {
+    "id": "rom:arcade:7f2e064d",
+    "title": "Lunar Lancer",
+    "year": 2004
+   },
+   {
+    "id": "rom:arcade:5c1167b8",
+    "title": "Metro Mayhem",
+    "year": 2005
+   },
+   {
+    "id": "rom:arcade:d2f848b6",
+    "title": "Neon Ninja",
+    "year": 1992
+   },
+   {
+    "id": "rom:arcade:b3dfa236",
+    "title": "Ocean Odyssey",
+    "year": 1992
+   },
+   {
+    "id": "rom:arcade:1e818459",
+    "title": "Pixel Paladin",
+    "year": 1993
+   },
+   {
+    "id": "rom:arcade:95eae604",
+    "title": "Puzzle Pagoda",
+    "year": 1994
+   },
+   {
+    "id": "rom:arcade:5f766f55",
+    "title": "Quantum Quest",
+    "year": 1995
+   },
+   {
+    "id": "rom:arcade:46657b8b",
+    "title": "Retro Rumble",
+    "year": 1989
+   },
+   {
+    "id": "rom:arcade:8a529cd7",
+    "title": "Robo Rescue",
+    "year": 2005
+   },
+   {
+    "id": "rom:arcade:c353d0a7",
+    "title": "Sky Fortress",
+    "year": 1991
+   },
+   {
+    "id": "rom:arcade:62a036b1",
+    "title": "Star Sprinter",
+    "year": 1999
+   },
+   {
+    "id": "rom:arcade:e2f8da85",
+    "title": "Super Snowball",
+    "year": 2007
+   },
+   {
+    "id": "rom:arcade:ec67d627",
+    "title": "Thunder Track",
+    "year": 2001
+   },
+   {
+    "id": "rom:arcade:cc45edcd",
+    "title": "Tiny Tactics",
+    "year": 1995
+   },
+   {
+    "id": "rom:arcade:1d2754df",
+    "title": "Ultra Uprising",
+    "year": 1988
+   },
+   {
+    "id": "rom:arcade:65b15cb0",
+    "title": "Volcano Vault",
+    "year": 2004
+   },
+   {
+    "id": "rom:arcade:8327721f",
+    "title": "Wild West Wheels",
+    "year": 2004
+   },
+   {
+    "id": "rom:arcade:09dc7686",
+    "title": "Zephyr Zone",
+    "year": 1992
+   }
+  ],
+  "steam": [
+   {
+    "id": "steam:200000",
+    "title": "Alpine Rally",
+    "year": 2004
+   },
+   {
+    "id": "steam:200010",
+    "title": "Battle Kart Deluxe",
+    "year": 2003
+   },
+   {
+    "id": "steam:200020",
+    "title": "Castle Climber",
+    "year": 1998
+   },
+   {
+    "id": "steam:200030",
+    "title": "Cosmic Courier",
+    "year": 1999
+   },
+   {
+    "id": "steam:200040",
+    "title": "Dune Runner",
+    "year": 2001
+   },
+   {
+    "id": "steam:200050",
+    "title": "Fable Forest",
+    "year": 1987
+   },
+   {
+    "id": "steam:200060",
+    "title": "Haunted Hallways",
+    "year": 1994
+   },
+   {
+    "id": "steam:200070",
+    "title": "Iron Orbit",
+    "year": 1997
+   },
+   {
+    "id": "steam:200080",
+    "title": "Lava Leap",
+    "year": 1991
+   },
+   {
+    "id": "steam:200090",
+    "title": "Metro Mayhem",
+    "year": 1991
+   },
+   {
+    "id": "steam:200100",
+    "title": "Pixel Paladin",
+    "year": 1999
+   },
+   {
+    "id": "steam:200110",
+    "title": "Quantum Quest",
+    "year": 2000
+   },
+   {
+    "id": "steam:200120",
+    "title": "Sky Fortress",
+    "year": 1994
+   },
+   {
+    "id": "steam:200130",
+    "title": "Super Snowball",
+    "year": 1987
+   },
+   {
+    "id": "steam:200140",
+    "title": "Ultra Uprising",
+    "year": 1988
+   },
+   {
+    "id": "steam:200150",
+    "title": "Wild West Wheels",
+    "year": 2003
+   }
+  ]
+ }
+}

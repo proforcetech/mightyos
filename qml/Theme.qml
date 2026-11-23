@@ -45,6 +45,8 @@ QtObject {
     readonly property int posterWidth:  px(200)
     readonly property int posterHeight: px(266)
     readonly property int posterIconSize: px(72)
+    // Small tiles of the "Recent" row on Home > Favorites.
+    readonly property int recentTileSize: px(150)
     // Category bar "pills".
     readonly property int pillHeight: px(76)
     readonly property int pillIconSize: px(40)

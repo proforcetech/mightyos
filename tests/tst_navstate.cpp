@@ -2,6 +2,7 @@
 #include "navstate.h"
 
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -23,6 +24,7 @@ private slots:
     void pathLengthIsCapped();
     void profilePaths();
     void saveLaterDebouncesAndFlushes();
+    void discardDropsPendingSave();
 
 private:
     static QVariantMap entry(const QString &screen, const QVariantMap &params, int row, int index,
@@ -214,6 +216,20 @@ void TestNavState::saveLaterDebouncesAndFlushes()
     NavState reader;
     reader.setDirectory(m_dir->path());
     QCOMPARE(reader.load(QStringLiteral("b")).first().toMap().value(QStringLiteral("index")).toInt(), 6);
+}
+
+void TestNavState::discardDropsPendingSave()
+{
+    const QVariantList path { entry(QStringLiteral("home"), {}, 0, 2, QStringLiteral("games")) };
+    m_state->saveLater(path, QStringLiteral("gone"));
+    m_state->discard(QStringLiteral("other"));      // someone else's: no effect
+    m_state->discard(QStringLiteral("gone"));
+    m_state->flush();
+    QVERIFY(!QFileInfo::exists(m_dir->path() + QStringLiteral("/profiles/gone")));
+    m_state->saveLater(path, QStringLiteral("kept"));
+    m_state->discard(QStringLiteral("gone"));
+    m_state->flush();
+    QCOMPARE(m_state->load(QStringLiteral("kept")).size(), 1);
 }
 
 QTEST_GUILESS_MAIN(TestNavState)

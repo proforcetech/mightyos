@@ -1,5 +1,6 @@
 import QtQuick
-import "mock/MockData.js" as Mock
+import MightyOS.Core
+import "Catalog.js" as Catalog
 
 // Base type for every NavStack screen.
 //
@@ -10,14 +11,14 @@ import "mock/MockData.js" as Mock
 //
 // Focus memory: saveState() returns { row, index, key, extra } where `row`
 // is the focusable row/component inside the screen (0 for single-row
-// screens), `index` the focused item, `key` its stable itemId and `extra`
+// screens), `index` the focused item, `key` its stable model key and `extra`
 // optional screen-specific data. restoreState() gets the same object back,
 // possibly stale: prefer `key`, clamp `index`, never assume it still fits.
 // Emit navStateChanged() whenever the focus moves so the path is persisted.
 //
 // Focused item: screens assign `focusedItem` (the model row under the
-// ring) whenever their focus moves, instead of bindings calling
-// model.get() on every evaluation. Prompts that depend on it should bind to
+// ring, from TileListModel.get()) whenever their focus moves, instead of
+// bindings calling get() on every evaluation. Prompts that depend on it should bind to
 // `focusedAcceptLabel` (a string, so it only notifies when the text changes
 // and the PromptBar is not rebuilt on every focus move).
 //
@@ -41,6 +42,8 @@ Item {
     // The model row under the focus ring, or null. Set by the screen.
     property var focusedItem: null
     readonly property string focusedAcceptLabel: acceptLabel(focusedItem)
+    // Whether the focused item can be a favorite (X / F), for prompts.
+    readonly property bool focusedCanFavorite: canFavorite(focusedItem)
     // NavStack's connections to this screen (so they can be cut when the
     // screen leaves the stack). Not for screens to touch.
     property var _stackConnections: null
@@ -53,6 +56,8 @@ Item {
     signal launchRequested(var item)
     signal toastRequested(string message, bool isError)
     signal dialogRequested(var spec)
+    // Open the profile picker (Home options, Settings > Profiles).
+    signal profilePickerRequested()
 
     // --- Overridable --------------------------------------------------------
 
@@ -74,12 +79,31 @@ Item {
     // Mouse wheel over empty screen space.
     function wheel(steps: int) {
     }
+    // True if the focused tile is shown as part of the favorites list
+    // (Home > Favorites row, the Favorites grid): enables reordering.
+    function focusedInFavoritesList(): bool {
+        return false
+    }
+    // Screen-specific entries appended to the options menu, and their
+    // handler (return true if `id` was one of them).
+    function extraOptions(): var {
+        return []
+    }
+    function extraOptionChosen(id: string): bool {
+        return false
+    }
 
     // --- Shared behaviour (driven by the focused row's `kind`) -------------
+
+    function canFavorite(row: var): bool {
+        return !!row && (row.kind === "game" || row.kind === "app" || row.kind === "system")
+    }
 
     function acceptLabel(row: var): string {
         if (!row)
             return qsTr("Select")
+        if (row.available === false)
+            return qsTr("Remove")
         return row.kind === "game" ? qsTr("Play")
              : row.kind === "app" ? qsTr("Launch")
              : qsTr("Open")
@@ -88,19 +112,29 @@ Item {
     function activateItem(row: var) {
         if (!row)
             return
+        if (row.available === false) {
+            _confirmRemoveUnavailable(row)
+            return
+        }
         switch (row.kind) {
         case "category": {
-            const category = Mock.category(row.itemId)
+            const category = Catalog.category(row.key)
             if (category)
                 openRequested(category.open.screen, category.open.params)
             break
         }
         case "system":
-            openRequested("games", { system: row.itemId })
+            openRequested("games", { system: row.key })
             break
         case "game":
         case "app":
-            launchRequested({ itemId: row.itemId, label: row.label, icon: row.icon })
+            launchRequested({ key: row.key, title: row.title, icon: row.icon, kind: row.kind })
+            break
+        case "profiles":
+            profilePickerRequested()
+            break
+        case "allapps":
+            openRequested("apps", {})
             break
         case "power":
             dialogRequested({
@@ -118,50 +152,107 @@ Item {
             })
             break
         case "section": {
-            const prefix = String(row.itemId).split(":")[0]
-            toastRequested(qsTr("%1 arrives in %2").arg(row.label)
-                           .arg(Mock.sectionMilestone[prefix] ?? qsTr("a later milestone")), false)
+            const prefix = String(row.key).split(":")[0]
+            toastRequested(qsTr("%1 arrives in %2").arg(row.title)
+                           .arg(Catalog.sectionMilestone[prefix] ?? qsTr("a later milestone")), false)
             break
         }
         }
     }
 
+    // A favorite whose target is gone: offer to remove it (Keep is the
+    // default and the Back answer).
+    function _confirmRemoveUnavailable(row: var) {
+        const key = row.key
+        const title = row.title
+        dialogRequested({
+            title: qsTr("%1 is unavailable").arg(title),
+            message: qsTr("It was uninstalled or its files are missing. Remove it from your favorites?"),
+            buttons: [
+                { id: "keep", label: qsTr("Keep") },
+                { id: "remove", label: qsTr("Remove"), destructive: true }
+            ],
+            onFinished: (id) => {
+                if (id === "remove" && Favorites.remove(key))
+                    screen.toastRequested(qsTr("Removed %1 from Favorites").arg(title), false)
+            }
+        })
+    }
+
     function optionsTitle(): string {
         const row = focusedRow()
-        return row ? row.label : ""
+        return row ? row.title : ""
     }
 
     function optionsFor(): var {
         const row = focusedRow()
         if (!row)
             return []
-        const items = [{ id: "activate", label: acceptLabel(row) }]
-        if (row.kind === "game" || row.kind === "app")
-            items.push({ id: "favorite", label: qsTr("Add to Favorites") },
-                       { id: "info", label: qsTr("Details") })
-        if (row.kind === "system")
+        const items = []
+        if (row.available !== false)
+            items.push({ id: "activate", label: acceptLabel(row) })
+        if (canFavorite(row)) {
+            const isFavorite = Favorites.isFavorite(row.key)
+            if (isFavorite && focusedInFavoritesList()) {
+                const index = Favorites.indexOf(row.key)
+                if (index > 0)
+                    items.push({ id: "moveLeft", label: qsTr("Move left") })
+                if (index >= 0 && index < Favorites.count - 1)
+                    items.push({ id: "moveRight", label: qsTr("Move right") })
+            }
+            items.push(isFavorite ? { id: "favorite", label: qsTr("Remove from Favorites"),
+                                      destructive: row.available === false }
+                                  : { id: "favorite", label: qsTr("Add to Favorites") })
+        }
+        if ((row.kind === "game" || row.kind === "app") && row.available !== false)
+            items.push({ id: "info", label: qsTr("Details") })
+        if (row.kind === "system" && row.available !== false)
             items.push({ id: "scan", label: qsTr("Scan for games") })
-        return items
+        return items.concat(extraOptions())
     }
 
     function optionChosen(id: string) {
+        if (extraOptionChosen(id))
+            return
         const row = focusedRow()
         if (!row)
             return
         switch (id) {
-        case "activate": activateItem(row); break
-        case "favorite": favoriteFocused(); break
-        case "info":     toastRequested(qsTr("Details arrive with the library in M4"), false); break
-        case "scan":     toastRequested(qsTr("ROM scanning arrives in M4"), false); break
+        case "activate":  activateItem(row); break
+        case "favorite":  favoriteFocused(); break
+        case "moveLeft":  moveFavorite(row.key, -1); break
+        case "moveRight": moveFavorite(row.key, 1); break
+        case "info":      toastRequested(qsTr("Details arrive with the library in M4"), false); break
+        case "scan":      toastRequested(qsTr("ROM scanning arrives in M4"), false); break
         }
     }
 
-    // Returns true if the focused item can be a favorite.
+    // Reorders a favorite; the moved tile keeps the focus (the model moves
+    // the row, it doesn't reset). Screens persist the new position.
+    function moveFavorite(key: string, delta: int) {
+        if (Favorites.move(key, delta)) {
+            SoundFx.play(SoundFx.Move)
+            navStateChanged()
+        } else {
+            SoundFx.play(SoundFx.Bump)
+        }
+    }
+
+    // X / F. Returns true if the focused item can be a favorite (the action
+    // is then consumed, whatever the outcome).
     function favoriteFocused(): bool {
         const row = focusedRow()
-        if (!row || (row.kind !== "game" && row.kind !== "app"))
+        if (!canFavorite(row))
             return false
-        toastRequested(qsTr("Favorites arrive in M2 (%1)").arg(row.label), false)
+        const wasFavorite = Favorites.isFavorite(row.key)
+        const nowFavorite = Favorites.toggle(row.key)
+        if (nowFavorite === wasFavorite) {
+            toastRequested(qsTr("Could not update Favorites"), true)
+        } else {
+            SoundFx.play(SoundFx.Accept)
+            toastRequested(nowFavorite ? qsTr("Added %1 to Favorites").arg(row.title)
+                                       : qsTr("Removed %1 from Favorites").arg(row.title), false)
+        }
         return true
     }
 

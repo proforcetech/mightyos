@@ -1,34 +1,39 @@
 import QtQuick
 import MightyOS.Core
 import MightyOS.UI
-import "../mock/MockData.js" as Mock
 
-// The games of one system (or the Favorites collection) as a poster grid.
-// LT/RT (Home/End) page through it; Accept launches the focused game.
+// The games of one system (Library.games()) or the Favorites collection
+// (Favorites.model) as a poster grid. LT/RT (Home/End) page through it;
+// Accept launches the focused game (or opens a favorited system/app).
 // LB/RB (PgUp/PgDn) step to the previous/next system of the same category
 // (SNES -> N64), replacing this grid in place: Back still returns to the
 // system list, whose focus follows. At the first/last system they bump.
-// In the Favorites collection LB/RB keep their global meaning.
+// In the Favorites collection LB/RB keep their global meaning, and the
+// options menu can reorder (Move left/right) and remove favorites.
 //
 // params: { system: "<systemId>" } or { collection: "favorites" }
 NavScreen {
     id: games
 
-    readonly property var _rows: Mock.gridRows(params)
-
-    title: Mock.gridTitle(params)
-    valid: _rows !== null
-
+    readonly property bool _isFavorites: !!(params && params.collection === "favorites")
     readonly property bool _isSystem: !!(params && params.system)
+    readonly property var _model: _isFavorites ? Favorites.model
+                                 : _isSystem ? Library.games(params.system) : null
 
-    // Constant for the lifetime of the screen (no per-move rebuild).
+    title: _isFavorites ? qsTr("Favorites")
+         : _isSystem ? (Library.system(params.system).title ?? "") : ""
+    valid: _model !== null
+
+    // Constant per screen except for the Favorite prompt (bool changes only).
     prompts: {
         const list = [
-            { action: InputRouter.Accept, label: qsTr("Play") },
-            { action: InputRouter.Back, label: qsTr("Back") },
-            { action: InputRouter.Options, label: qsTr("Options") },
-            { action: InputRouter.PageDown, label: qsTr("Page"), pad: "LT RT", key: qsTr("Home End") }
+            { action: InputRouter.Accept, label: focusedAcceptLabel },
+            { action: InputRouter.Back, label: qsTr("Back") }
         ]
+        if (focusedCanFavorite)
+            list.push({ action: InputRouter.Favorite, label: qsTr("Favorite") })
+        list.push({ action: InputRouter.Options, label: qsTr("Options") },
+                  { action: InputRouter.PageDown, label: qsTr("Page"), pad: "LT RT", key: qsTr("Home End") })
         if (_isSystem)
             list.push({ action: InputRouter.NextCategory, label: qsTr("System"),
                         pad: "LB RB", key: qsTr("PgUp PgDn") })
@@ -36,12 +41,16 @@ NavScreen {
     }
 
     function _updateFocused() {
-        focusedItem = grid.currentIndex >= 0 && grid.currentIndex < grid.count ? gameModel.get(grid.currentIndex) : null
+        focusedItem = grid.currentEntry()
+    }
+
+    function focusedInFavoritesList(): bool {
+        return _isFavorites
     }
 
     function _stepSystem(delta: int) {
-        const next = Mock.adjacentSystem(params.system, delta)
-        if (!next) {
+        const next = Library.adjacentSystem(params.system, delta)
+        if (next.length === 0) {
             grid.bump(delta < 0 ? "left" : "right")
             return
         }
@@ -75,7 +84,7 @@ NavScreen {
     }
 
     function saveState(): var {
-        return { row: 0, index: Math.max(0, grid.currentIndex), key: grid.keyAt(grid.currentIndex), extra: {} }
+        return { row: 0, index: grid.savedIndex(), key: grid.savedKey(), extra: {} }
     }
 
     function restoreState(state: var) {
@@ -90,12 +99,9 @@ NavScreen {
         }
     }
 
-    ListModel { id: gameModel }
-
     Component.onCompleted: {
         if (!valid)
             return
-        gameModel.append(_rows)
         grid.currentIndex = 0
         _updateFocused()
     }
@@ -103,26 +109,36 @@ NavScreen {
     InfoHeader {
         id: header
         anchors { left: parent.left; right: parent.right; top: parent.top }
-        heading: games.focusedItem ? games.focusedItem.label : games.title
+        heading: games.focusedItem ? games.focusedItem.title
+               : (games._isFavorites ? qsTr("No favorites yet") : games.title)
         detail: {
             const row = games.focusedItem
+            if (!row && games._isFavorites)
+                return qsTr("Press X (F) on any game, app or system to pin it here")
             const position = grid.count > 0
                 ? qsTr("%1 of %2").arg(grid.currentIndex + 1).arg(grid.count) : qsTr("No games")
-            return row ? row.subtitle + "  ·  " + position : position
+            if (!row)
+                return position
+            const sub = row.available === false ? qsTr("Unavailable") : row.subtitle
+            return sub.length > 0 ? sub + "  ·  " + position : position
         }
     }
 
     TileGrid {
         id: grid
+        objectName: "gameGrid"
         anchors { top: header.bottom; bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
         anchors.topMargin: Theme.spacingS
         availableWidth: games.width
-        model: gameModel
+        model: games._model
         active: games.focusShown
+        onCurrentDataChanged: games._updateFocused()
         onCurrentIndexChanged: {
             games._updateFocused()
             games.navStateChanged()
         }
-        onActivated: (index) => games.activateItem(gameModel.get(index))
+        onCurrentItemChanged: games._updateFocused()
+        onCountChanged: games._updateFocused()
+        onActivated: (index) => games.activateItem(games._model.get(index))
     }
 }

@@ -9,7 +9,7 @@ Item {
     width: 1200
     height: 800
 
-    ListModel { id: gridModel }
+    TileListModel { id: gridModel }
 
     TileGrid {
         id: grid
@@ -32,7 +32,7 @@ Item {
             gridModel.clear()
             for (let i = 0; i < 38; ++i) {
                 const letter = String.fromCharCode(65 + Math.floor(i / 2))   // A A B B C C ...
-                gridModel.append({ itemId: "g" + i, label: letter + " game " + i, sortTitle: letter + " game " + i,
+                gridModel.appendRow({ key: "g" + i, title: letter + " game " + i, sortTitle: letter + " game " + i,
                                    icon: "cartridge", tint: "#9b8cff" })
             }
             grid.currentIndex = 0

@@ -1,5 +1,7 @@
 #include "navstate.h"
 
+#include "ids.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -78,8 +80,7 @@ QString NavState::defaultDirectory()
 bool NavState::isValidProfileId(const QString &profileId)
 {
     // Used as a single path component: no separators, no dots.
-    static const QRegularExpression re(QStringLiteral("^[A-Za-z0-9_-]{1,64}$"));
-    return re.match(profileId).hasMatch();
+    return Ids::isValidProfileId(profileId);
 }
 
 QString NavState::filePath(const QString &profileId) const
@@ -218,4 +219,13 @@ void NavState::flush()
         return;
     m_pending = false;
     save(m_pendingPath, m_pendingProfile);
+}
+
+void NavState::discard(const QString &profileId)
+{
+    if (!m_pending || m_pendingProfile != profileId)
+        return;
+    m_pending = false;
+    m_saveTimer.stop();
+    m_pendingPath.clear();
 }

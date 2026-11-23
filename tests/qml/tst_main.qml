@@ -38,7 +38,12 @@ Item {
 
         function init() {
             InputRouter.muteFor(0)
-            NavState.save([], "")                       // start at Home
+            // One profile (so no picker) and its saved path empty: Home.
+            for (const p of ProfileService.profiles) {
+                if (p.id !== ProfileService.activeId)
+                    ProfileService.remove(p.id)
+            }
+            NavState.save([], ProfileService.activeId)
             win = createTemporaryObject(mainComponent, null,
                                         { launchCommand: testApp(["--quit-after", "300"]) })
             verify(win)
@@ -123,11 +128,11 @@ Item {
         }
 
         function test_dialogDefaultsToCancel() {
-            // Settings -> Power opens the confirmation dialog.
+            // Settings -> Power (the last tile) opens the confirmation dialog.
             for (let i = 0; i < 5; ++i)
                 act(InputRouter.NextCategory)
             act(InputRouter.Navigate, "down")
-            for (let i = 0; i < 5; ++i)
+            for (let i = 0; i < 7; ++i)
                 act(InputRouter.Navigate, "right")
             compare(stack.current.saveState().key, "settings:power")
             const spy = createTemporaryObject(spyComponent, root, { target: dialog, signalName: "finished" })

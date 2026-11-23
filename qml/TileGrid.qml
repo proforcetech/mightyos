@@ -6,9 +6,8 @@ import MightyOS.Core
 // moving past an edge bumps. Up from the first row returns false so the
 // screen can move focus to whatever sits above the grid.
 //
-// Model contract: same as TileRow (itemId, label, icon, tint, optional
-// subtitle/available, get(i)). jumpToLetter() also reads `sortTitle` if the
-// model has it, else `label`.
+// Model contract: same as TileRow (a TileListModel). jumpToLetter() uses
+// the model's firstIndexForLetter() (sortTitle, else title).
 //
 // Set `availableWidth`; the grid sizes itself to a whole number of columns
 // and centres in that width. Height is up to the parent.
@@ -16,6 +15,9 @@ GridView {
     id: grid
 
     signal activated(int index)
+    // The model row under the focus changed in place (dataChanged, reset):
+    // screens refresh their focusedItem.
+    signal currentDataChanged()
     signal focusRequested()
 
     property bool active: true
@@ -64,11 +66,14 @@ GridView {
         required property var model
 
         poster: true
-        label: tileDelegate.model.label ?? ""
+        label: tileDelegate.model.title ?? ""
         subtitle: tileDelegate.model.subtitle ?? ""
         iconName: tileDelegate.model.icon ?? ""
-        tint: tileDelegate.model.tint ?? Theme.accent
+        artwork: tileDelegate.model.artwork ?? ""
+        tint: tileDelegate.model.tint || Theme.accent
         available: tileDelegate.model.available ?? true
+        badge: tileDelegate.model.badge ?? ""
+        favorite: Favorites.revision >= 0 && Favorites.isFavorite(tileDelegate.model.key ?? "")
         focused: GridView.isCurrentItem && grid.active
         bumpX: GridView.isCurrentItem ? grid.bumpX : 0
         bumpY: GridView.isCurrentItem ? grid.bumpY : 0
@@ -90,6 +95,12 @@ GridView {
         }
     }
 
+    onCountChanged: {
+        if (currentIndex < 0 && count > 0)
+            currentIndex = 0
+        _takePending()
+    }
+
     // Geometry changes (first layout after a restore, window resize, column
     // count change) don't re-apply the highlight range by themselves.
     onWidthChanged: _keepCurrentVisible()
@@ -103,6 +114,7 @@ GridView {
     }
 
     function _setIndex(index: int) {
+        _pendingKey = ""
         currentIndex = index
         SoundFx.play(SoundFx.Move)
     }
@@ -181,6 +193,7 @@ GridView {
         if (!InputRouter.pointerAction())
             return
         focusRequested()
+        _pendingKey = ""
         currentIndex = index
         if (button === Qt.RightButton) {
             InputRouter.dispatch(InputRouter.Options, "", InputRouter.Mouse)
@@ -199,35 +212,97 @@ GridView {
         SoundFx.play(SoundFx.Bump)
     }
 
-    function _item(index: int): var {
-        if (index < 0 || index >= count || !model || typeof model.get !== "function")
-            return null
-        return model.get(index)
-    }
-
     function keyAt(index: int): string {
-        const item = _item(index)
-        return item ? (item.itemId ?? "") : ""
+        return model && index >= 0 ? model.keyAt(index) : ""
     }
 
     function indexOfKey(key: string): int {
-        if (key.length === 0)
-            return -1
-        for (let i = 0; i < count; ++i) {
-            if (keyAt(i) === key)
-                return i
+        return model && key.length > 0 ? model.indexOfKey(key) : -1
+    }
+
+    function currentEntry(): var {
+        return model && currentIndex >= 0 && currentIndex < count ? model.get(currentIndex) : null
+    }
+
+    property string _resetKey
+    property int _resetIndex: 0
+    // App-backed rows (Media, All apps, Recent): a saved key that isn't in
+    // the model before AppRegistry's first scan stays pending instead of
+    // being clamped away. Static rows keep the plain clamp.
+    property bool keepPendingKey: false
+    property string _pendingKey
+    property int _pendingIndex: 0
+    Connections {
+        target: AppRegistry
+        function onReadyChanged() {
+            // After a real scan a missing key is really gone.
+            grid._takePending()
+            grid._pendingKey = ""
         }
-        return -1
+    }
+    Connections {
+        target: grid.model
+        ignoreUnknownSignals: true
+        function onItemsAboutToReset() {
+            grid._resetKey = grid.savedKey()
+            grid._resetIndex = grid.savedIndex()
+        }
+        function onItemsReset() {
+            grid.restoreFocus(grid._resetIndex, grid._resetKey)
+        }
+        function onDataChanged(topLeft: var, bottomRight: var) {
+            if (grid.currentIndex >= topLeft.row && grid.currentIndex <= bottomRight.row)
+                grid.currentDataChanged()
+        }
+        function onItemMoved(from: int, to: int) {
+            // Focus stays on the same tile (reordering favorites).
+            if (grid.currentIndex === from)
+                grid.currentIndex = to
+            else if (from < grid.currentIndex && to >= grid.currentIndex)
+                grid.currentIndex -= 1
+            else if (from > grid.currentIndex && to <= grid.currentIndex)
+                grid.currentIndex += 1
+        }
     }
 
     function restoreFocus(index: int, key: string) {
+        _pendingKey = ""
+        let target = indexOfKey(key)
+        if (target < 0 && key.length > 0 && keepPendingKey && !AppRegistry.ready) {
+            // Not there (yet): apps arrive with the first scan, Recent after
+            // a re-scan. Remember it until it shows up or the user moves,
+            // and save it unchanged meanwhile (savedKey/savedIndex).
+            _pendingKey = key
+            _pendingIndex = Math.max(0, index)
+        }
         if (count === 0)
             return
-        let target = indexOfKey(key)
         if (target < 0)
             target = Math.max(0, Math.min(index, count - 1))
         currentIndex = target
         _keepCurrentVisible()
+        currentDataChanged()
+    }
+
+    // What to persist: a still-pending saved position wins over the
+    // fallback tile the view shows meanwhile.
+    function savedKey(): string {
+        return _pendingKey.length > 0 ? _pendingKey : keyAt(currentIndex)
+    }
+    function savedIndex(): int {
+        return _pendingKey.length > 0 ? _pendingIndex : Math.max(0, currentIndex)
+    }
+
+    function _takePending() {
+        if (_pendingKey.length === 0)
+            return
+        const i = indexOfKey(_pendingKey)
+        if (i >= 0) {
+            _pendingKey = ""
+            currentIndex = i
+            _keepCurrentVisible()
+            currentDataChanged()
+        }
     }
 
     // Letter-jump hook (A-Z overlay / LT-RT letter mode arrive with the real
@@ -235,18 +310,11 @@ GridView {
     // `letter` or, if none does, the first one after it. Assumes the model
     // is sorted. Returns true if focus moved.
     function jumpToLetter(letter: string): bool {
-        const wanted = letter.toUpperCase()
-        for (let i = 0; i < count; ++i) {
-            const item = _item(i)
-            const title = String(item ? (item.sortTitle ?? item.label ?? "") : "").toUpperCase()
-            if (title.length > 0 && title[0] >= wanted) {
-                if (i === currentIndex)
-                    return false
-                _setIndex(i)
-                return true
-            }
-        }
-        return false
+        const i = model ? model.firstIndexForLetter(letter) : -1
+        if (i < 0 || i === currentIndex)
+            return false
+        _setIndex(i)
+        return true
     }
 
     ParallelAnimation {

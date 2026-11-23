@@ -6,9 +6,10 @@ import MightyOS.Core
 // "bump". The row never reads keys: its screen forwards InputRouter actions
 // to moveFocus() / activateCurrent().
 //
-// Model contract (ListModel now, C++ models from M2):
-//   roles  itemId (stable id), label, icon, tint; optional subtitle, available
-//   get(i) returns an object with those roles (used for focus-by-key).
+// Model contract: a TileListModel (C++). Roles key, title, subtitle, icon,
+// artwork, kind, available, tint, badge; lookups go through its
+// indexOfKey() / keyAt() (hash-backed), never a JavaScript loop. A model
+// reset (re-scan, profile switch) keeps the focus on the same key.
 //
 // Mouse: hovering focuses the row and the tile (after real pointer
 // movement), a left click activates the clicked tile itself, a right click
@@ -19,6 +20,9 @@ ListView {
     id: row
 
     signal activated(int index)
+    // The model row under the focus changed in place (dataChanged, reset):
+    // screens refresh their focusedItem.
+    signal currentDataChanged()
     // Hover / click / wheel: the screen should make this row the focused one.
     signal focusRequested()
 
@@ -27,6 +31,8 @@ ListView {
     readonly property bool bumping: _bump.running
     property int tileWidth: Theme.tileSize
     property int tileHeight: Theme.tileSize
+    // Star badges on favorites (off for rows that never hold favorites).
+    property bool showFavorites: true
 
     readonly property real _contentW: count > 0 ? count * tileWidth + (count - 1) * spacing : 0
 
@@ -61,11 +67,19 @@ ListView {
         required property int index
         required property var model    // see model contract above
 
-        label: tileDelegate.model.label ?? ""
+        width: row.tileWidth
+        height: row.tileHeight
+        label: tileDelegate.model.title ?? ""
         subtitle: tileDelegate.model.subtitle ?? ""
         iconName: tileDelegate.model.icon ?? ""
-        tint: tileDelegate.model.tint ?? Theme.accent
+        artwork: tileDelegate.model.artwork ?? ""
+        tint: tileDelegate.model.tint || Theme.accent
+        tintIcon: tileDelegate.model.kind === "profile"
         available: tileDelegate.model.available ?? true
+        badge: tileDelegate.model.badge ?? ""
+        // `revision` makes the binding re-evaluate when favorites change.
+        favorite: row.showFavorites && Favorites.revision >= 0
+                  && Favorites.isFavorite(tileDelegate.model.key ?? "")
         focused: ListView.isCurrentItem && row.active
         bumpX: ListView.isCurrentItem ? row.bumpOffset : 0
 
@@ -80,6 +94,14 @@ ListView {
             row.focusRequested()
             row.wheelStep(steps)
         }
+    }
+
+    // Rows added to an empty model (the first favorite) leave the view at
+    // index -1; there is always a focused tile when there are tiles.
+    onCountChanged: {
+        if (currentIndex < 0 && count > 0)
+            currentIndex = 0
+        _takePending()
     }
 
     // Geometry changes (first layout after a restore, window resize) don't
@@ -109,6 +131,7 @@ ListView {
             bump(direction)
             return false
         }
+        _pendingKey = ""
         currentIndex = next
         SoundFx.play(SoundFx.Move)
         return true
@@ -134,6 +157,7 @@ ListView {
             return
         focusRequested()
         if (currentIndex !== index) {
+            _pendingKey = ""
             currentIndex = index
             SoundFx.play(SoundFx.Move)
         }
@@ -143,6 +167,7 @@ ListView {
         if (!InputRouter.pointerAction())
             return
         focusRequested()
+        _pendingKey = ""
         currentIndex = index
         if (button === Qt.RightButton) {
             InputRouter.dispatch(InputRouter.Options, "", InputRouter.Mouse)
@@ -163,31 +188,101 @@ ListView {
     }
 
     function keyAt(index: int): string {
-        if (index < 0 || index >= count || !model || typeof model.get !== "function")
-            return ""
-        return model.get(index).itemId ?? ""
+        return model && index >= 0 ? model.keyAt(index) : ""
     }
 
     function indexOfKey(key: string): int {
-        if (key.length === 0)
-            return -1
-        for (let i = 0; i < count; ++i) {
-            if (keyAt(i) === key)
-                return i
+        return model && key.length > 0 ? model.indexOfKey(key) : -1
+    }
+
+    // The model row under the focus, as a plain object (or null).
+    function currentEntry(): var {
+        return model && currentIndex >= 0 && currentIndex < count ? model.get(currentIndex) : null
+    }
+
+    // A reset replaces every row: put the focus back on the same key (or
+    // the same, clamped, index if that item is gone).
+    property string _resetKey
+    property int _resetIndex: 0
+    // App-backed rows (Media, All apps, Recent): a saved key that isn't in
+    // the model before AppRegistry's first scan stays pending instead of
+    // being clamped away. Static rows keep the plain clamp.
+    property bool keepPendingKey: false
+    property string _pendingKey
+    property int _pendingIndex: 0
+    Connections {
+        target: AppRegistry
+        function onReadyChanged() {
+            // After a real scan a missing key is really gone.
+            row._takePending()
+            row._pendingKey = ""
         }
-        return -1
+    }
+    Connections {
+        target: row.model
+        ignoreUnknownSignals: true
+        function onItemsAboutToReset() {
+            row._resetKey = row.savedKey()
+            row._resetIndex = row.savedIndex()
+        }
+        function onItemsReset() {
+            row.restoreFocus(row._resetIndex, row._resetKey)
+        }
+        function onDataChanged(topLeft: var, bottomRight: var) {
+            if (row.currentIndex >= topLeft.row && row.currentIndex <= bottomRight.row)
+                row.currentDataChanged()
+        }
+        function onItemMoved(from: int, to: int) {
+            // Focus stays on the same tile (reordering favorites).
+            if (row.currentIndex === from)
+                row.currentIndex = to
+            else if (from < row.currentIndex && to >= row.currentIndex)
+                row.currentIndex -= 1
+            else if (from > row.currentIndex && to <= row.currentIndex)
+                row.currentIndex += 1
+        }
     }
 
     // Focus by stable key if it still exists, else by (clamped) index. Used
     // when restoring a saved path, where items may have changed meanwhile.
     function restoreFocus(index: int, key: string) {
+        _pendingKey = ""
+        let target = indexOfKey(key)
+        if (target < 0 && key.length > 0 && keepPendingKey && !AppRegistry.ready) {
+            // Not there (yet): apps arrive with the first scan, Recent after
+            // a re-scan. Remember it until it shows up or the user moves,
+            // and save it unchanged meanwhile (savedKey/savedIndex).
+            _pendingKey = key
+            _pendingIndex = Math.max(0, index)
+        }
         if (count === 0)
             return
-        let target = indexOfKey(key)
         if (target < 0)
             target = Math.max(0, Math.min(index, count - 1))
         currentIndex = target
         _keepCurrentVisible()
+        currentDataChanged()
+    }
+
+    // What to persist: a still-pending saved position wins over the
+    // fallback tile the view shows meanwhile.
+    function savedKey(): string {
+        return _pendingKey.length > 0 ? _pendingKey : keyAt(currentIndex)
+    }
+    function savedIndex(): int {
+        return _pendingKey.length > 0 ? _pendingIndex : Math.max(0, currentIndex)
+    }
+
+    function _takePending() {
+        if (_pendingKey.length === 0)
+            return
+        const i = indexOfKey(_pendingKey)
+        if (i >= 0) {
+            _pendingKey = ""
+            currentIndex = i
+            _keepCurrentVisible()
+            currentDataChanged()
+        }
     }
 
     SequentialAnimation {
