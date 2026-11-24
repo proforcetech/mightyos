@@ -44,6 +44,7 @@ const sections = {
         { key: "settings:audio",       title: qsTr("Audio"),       icon: "audio",     tint: "#a0aec0" },
         { key: "settings:network",     title: qsTr("Network"),     icon: "network",   tint: "#a0aec0" },
         { key: "settings:controllers", title: qsTr("Controllers"), icon: "emulators", tint: "#a0aec0", kind: "controllers" },
+        { key: "settings:artwork",     title: qsTr("Artwork"),     icon: "display",   tint: "#66c0f4", kind: "artwork" },
         { key: "settings:storage",     title: qsTr("Storage"),     icon: "folder",    tint: "#a0aec0" },
         { key: "settings:power",       title: qsTr("Power"),       icon: "power",     tint: "#ff6b6b", kind: "power" }
     ]
@@ -56,8 +57,9 @@ function category(id) {
     return categories.find(c => c.key === id) ?? null
 }
 
-function categoryRows() {
-    return categories.map(c => ({ key: c.key, title: c.title, icon: c.icon, tint: c.tint,
+// `restricted` (a kids profile, PLAN D13): no App Store, no Settings.
+function categoryRows(restricted) {
+    return categories.filter(c => !restricted || (c.key !== "store" && c.key !== "settings")).map(c => ({ key: c.key, title: c.title, icon: c.icon, tint: c.tint,
                                   subtitle: "", kind: "category" }))
 }
 

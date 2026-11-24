@@ -7,6 +7,7 @@
 #include <QStandardPaths>
 
 #include <csignal>
+#include <memory>
 #include <sys/prctl.h>
 #include <unistd.h>
 
@@ -85,6 +86,16 @@ Launcher::Launcher(QObject *parent)
 
 Launcher::~Launcher()
 {
+    for (const QPointer<QProcess> &process : std::as_const(m_background)) {
+        if (process && process->state() != QProcess::NotRunning) {
+            process->disconnect(this);
+            signalGroup(process, SIGTERM);
+            if (!process->waitForFinished(1500)) {
+                signalGroup(process, SIGKILL);
+                process->waitForFinished(500);
+            }
+        }
+    }
     if (m_process && m_process->state() != QProcess::NotRunning) {
         // Leaving the launcher takes the running app down with it. M6 moves
         // apps into their own systemd scopes, which changes this policy.
@@ -128,6 +139,13 @@ QString Launcher::resolveProgram(const QString &program, const QProcessEnvironme
 
 bool Launcher::launch(const QString &id, const QStringList &argv)
 {
+    return launch(id, argv, nullptr);
+}
+
+bool Launcher::launch(const QString &id, const QStringList &argv, LaunchTracker *tracker)
+{
+    // Owned from here on, whatever happens.
+    std::unique_ptr<LaunchTracker> owned(tracker);
     if (id.isEmpty()) {
         emit failed(id, tr("No application id given."));
         return false;
@@ -174,6 +192,8 @@ bool Launcher::launch(const QString &id, const QStringList &argv)
             return;
         qCInfo(lcLauncher) << "started" << m_currentId << "pid" << process->processId();
         emit launched(m_currentId);
+        if (m_tracker)
+            m_tracker->start();
     });
 
     connect(process, &QProcess::errorOccurred, this, [this, process](QProcess::ProcessError error) {
@@ -196,11 +216,29 @@ bool Launcher::launch(const QString &id, const QStringList &argv)
             return;
         const QString id = m_currentId;
         const int code = (status == QProcess::CrashExit) ? -1 : exitCode;
+        if (m_tracker && (code == 0 || m_tracker->seen())) {
+            // Handed over (steam://...): the tracker decides from here.
+            qCInfo(lcLauncher) << "launcher process of" << id << "exited, tracking the app";
+            m_process->disconnect(this);
+            m_process->deleteLater();
+            m_process = nullptr;
+            return;
+        }
         qCInfo(lcLauncher) << "exited" << id << "code" << code;
         finish();
         emit exited(id, code);
     });
 
+    if (owned) {
+        m_tracker = owned.release();
+        m_tracker->setParent(this);
+        connect(m_tracker, &LaunchTracker::appStarted, this, [this] {
+            qCInfo(lcLauncher) << "tracked app" << m_currentId << "is running";
+            setWaiting(false);
+        });
+        connect(m_tracker, &LaunchTracker::appFinished, this, &Launcher::endTracked);
+        setWaiting(true);
+    }
     m_process = process;
     setCurrentId(id);
     setRunning(true);
@@ -225,6 +263,58 @@ QStringList Launcher::testAppCommand() const
     return {};
 }
 
+void Launcher::endTracked()
+{
+    if (!m_tracker)
+        return;
+    const QString id = m_currentId;
+    qCInfo(lcLauncher) << "tracked app" << id << (m_tracker->seen() ? "ended" : "did not show up");
+    if (m_process && m_process->state() != QProcess::NotRunning) {
+        // E.g. the Steam client this launch started: keep it running.
+        QProcess *process = m_process;
+        process->disconnect(this);
+        m_process = nullptr;
+        connect(process, &QProcess::finished, process, &QObject::deleteLater);
+        m_background.removeAll(nullptr);
+        m_background.append(process);
+    }
+    finish();
+    emit exited(id, 0);
+}
+
+void Launcher::stopTracking()
+{
+    if (m_tracker && m_running)
+        endTracked();
+}
+
+bool Launcher::runAuxiliary(const QStringList &argv)
+{
+    if (argv.isEmpty())
+        return false;
+    const QProcessEnvironment env = buildChildEnvironment(QProcessEnvironment::systemEnvironment());
+    const QString program = resolveProgram(argv.first(), env);
+    if (program.isEmpty())
+        return false;
+    auto *process = new QProcess(this);
+    process->setProgram(program);
+    process->setArguments(argv.mid(1));
+    process->setProcessEnvironment(env);
+    process->setWorkingDirectory(env.value(QStringLiteral("HOME"), QDir::homePath()));
+    process->setStandardInputFile(QProcess::nullDevice());
+    process->setProcessChannelMode(QProcess::ForwardedChannels);
+    process->setUnixProcessParameters(QProcess::UnixProcessFlag::ResetSignalHandlers
+                                      | QProcess::UnixProcessFlag::CloseFileDescriptors
+                                      | QProcess::UnixProcessFlag::CreateNewSession);
+    connect(process, &QProcess::finished, process, &QObject::deleteLater);
+    connect(process, &QProcess::errorOccurred, process, [process](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart)
+            process->deleteLater();
+    });
+    process->start();
+    return true;
+}
+
 void Launcher::finish()
 {
     if (m_process) {
@@ -232,8 +322,22 @@ void Launcher::finish()
         m_process->deleteLater();
         m_process = nullptr;
     }
+    if (m_tracker) {
+        m_tracker->disconnect(this);
+        m_tracker->deleteLater();
+        m_tracker = nullptr;
+    }
+    setWaiting(false);
     setRunning(false);
     setCurrentId(QString());
+}
+
+void Launcher::setWaiting(bool waiting)
+{
+    if (m_waiting == waiting)
+        return;
+    m_waiting = waiting;
+    emit waitingChanged();
 }
 
 void Launcher::setRunning(bool running)

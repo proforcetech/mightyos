@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "id": "gamecube",
+  "label": "GameCube",
+  "fullName": "Nintendo GameCube",
+  "category": "emulators",
+  "order": 60,
+  "icon": "disc",
+  "tint": "#8a6bd1",
+  "extensions": [
+    "iso",
+    "gcm",
+    "gcz",
+    "rvz",
+    "ciso",
+    "m3u"
+  ],
+  "romDirs": [
+    "~/ROMs/gamecube"
+  ],
+  "emulators": [
+    {
+      "id": "dolphin",
+      "label": "Dolphin",
+      "type": "flatpak",
+      "app": "org.DolphinEmu.dolphin-emu",
+      "args": [
+        "-u",
+        "{appdata}",
+        "-b",
+        "-e",
+        "{rom}"
+      ]
+    }
+  ],
+  "defaultEmulator": "dolphin"
+}

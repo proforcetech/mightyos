@@ -36,14 +36,23 @@ QString defaultBase(QStandardPaths::StandardLocation location)
 
 ProfileService::ProfileService(QObject *parent)
     : ProfileService(defaultBase(QStandardPaths::GenericConfigLocation),
-                     defaultBase(QStandardPaths::GenericStateLocation), parent)
+                     defaultBase(QStandardPaths::GenericStateLocation),
+                     defaultBase(QStandardPaths::GenericDataLocation), QDir::homePath(), parent)
 {
 }
 
 ProfileService::ProfileService(const QString &configDir, const QString &stateDir, QObject *parent)
+    : ProfileService(configDir, stateDir, QString(), QString(), parent)
+{
+}
+
+ProfileService::ProfileService(const QString &configDir, const QString &stateDir, const QString &dataDir,
+                               const QString &home, QObject *parent)
     : QObject(parent)
     , m_configDir(configDir)
     , m_stateDir(stateDir)
+    , m_dataDir(dataDir)
+    , m_home(home)
 {
     if (!load())
         createDefault();
@@ -104,6 +113,57 @@ QString ProfileService::profileStateDir(const QString &id) const
     if (m_stateDir.isEmpty() || !Ids::isValidProfileId(id))
         return {};
     return m_stateDir + QStringLiteral("/profiles/") + id;
+}
+
+QString ProfileService::profileDataDir(const QString &id) const
+{
+    if (m_dataDir.isEmpty() || !Ids::isValidProfileId(id))
+        return {};
+    return m_dataDir + QStringLiteral("/profiles/") + id;
+}
+
+QStringList ProfileService::savesDirs(const QString &id) const
+{
+    QStringList dirs;
+    if (const QString data = profileDataDir(id); !data.isEmpty())
+        dirs.append(data + QStringLiteral("/saves"));
+    if (!m_home.isEmpty() && Ids::isValidProfileId(id))
+        dirs.append(m_home + QStringLiteral("/.var/app/org.libretro.RetroArch/data/mightyos/profiles/") + id);
+    return dirs;
+}
+
+bool ProfileService::hasSaves(const QString &id) const
+{
+    for (const QString &dir : savesDirs(id)) {
+        const QFileInfo info(dir);
+        if (info.isDir() && !info.isSymLink()
+            && !QDir(dir).entryList(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden).isEmpty())
+            return true;
+    }
+    return false;
+}
+
+QString ProfileService::savesLocation(const QString &id) const
+{
+    const QStringList dirs = savesDirs(id);
+    if (dirs.isEmpty())
+        return {};
+    QString dir = dirs.constFirst();
+    if (!m_home.isEmpty() && dir.startsWith(m_home + QLatin1Char('/')))
+        dir = QStringLiteral("~") + dir.mid(m_home.size());
+    return dir;
+}
+
+bool ProfileService::removeTree(const QString &dir) const
+{
+    if (dir.isEmpty())
+        return true;
+    const QFileInfo info(dir);
+    if (info.isSymLink())
+        return QFile::remove(dir);   // never follow a symlink out of our dirs
+    if (info.isDir())
+        return QDir(dir).removeRecursively();
+    return true;
 }
 
 int ProfileService::indexOf(const QString &id) const
@@ -413,7 +473,7 @@ bool ProfileService::update(const QString &id, const QString &name, const QStrin
 
 bool ProfileService::dataDirsAreSafe() const
 {
-    for (const QString &base : { m_configDir, m_stateDir }) {
+    for (const QString &base : { m_configDir, m_stateDir, m_dataDir }) {
         if (base.isEmpty())
             continue;
         if (QFileInfo(base).isSymLink() || QFileInfo(base + QStringLiteral("/profiles")).isSymLink())
@@ -422,7 +482,7 @@ bool ProfileService::dataDirsAreSafe() const
     return true;
 }
 
-bool ProfileService::remove(const QString &id)
+bool ProfileService::remove(const QString &id, bool keepSaves)
 {
     const int i = indexOf(id);
     if (i < 0 || m_profiles.size() <= 1)
@@ -438,13 +498,18 @@ bool ProfileService::remove(const QString &id)
 
     // Per-profile data goes with it. The id was validated, so these are
     // direct children of our own profiles/ dirs.
-    for (const QString &dir : { profileConfigDir(id), profileStateDir(id) }) {
-        if (!dir.isEmpty() && QFileInfo(dir).isDir() && !QFileInfo(dir).isSymLink())
-            QDir(dir).removeRecursively();
-        else if (!dir.isEmpty() && QFileInfo(dir).isSymLink())
-            QFile::remove(dir);   // never follow a symlink out of our dirs
+    for (const QString &dir : { profileConfigDir(id), profileStateDir(id) })
+        removeTree(dir);
+    if (!m_home.isEmpty()) {
+        // Generated Flatpak RetroArch config (not a save).
+        removeTree(m_home + QStringLiteral("/.var/app/org.libretro.RetroArch/config/mightyos/profiles/") + id);
     }
-    qCInfo(lcProfiles) << "removed profile" << id;
+    if (!keepSaves) {
+        for (const QString &dir : savesDirs(id))
+            removeTree(dir);
+        removeTree(profileDataDir(id));
+    }
+    qCInfo(lcProfiles) << "removed profile" << id << (keepSaves ? "(saves kept)" : "(saves deleted)");
     emit profileRemoved(id);
     if (id == m_activeId) {
         m_activeId.clear();

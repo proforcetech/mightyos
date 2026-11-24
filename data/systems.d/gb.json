@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "gb",
+  "label": "Game Boy",
+  "fullName": "Nintendo Game Boy",
+  "category": "emulators",
+  "order": 40,
+  "icon": "handheld",
+  "tint": "#8bac0f",
+  "extensions": [
+    "gb",
+    "zip",
+    "7z"
+  ],
+  "romDirs": [
+    "~/ROMs/gb"
+  ],
+  "emulators": [
+    {
+      "id": "gambatte",
+      "label": "Gambatte (RetroArch)",
+      "type": "retroarch",
+      "core": "gambatte"
+    },
+    {
+      "id": "sameboy",
+      "label": "SameBoy (RetroArch)",
+      "type": "retroarch",
+      "core": "sameboy"
+    },
+    {
+      "id": "mgba",
+      "label": "mGBA (RetroArch)",
+      "type": "retroarch",
+      "core": "mgba"
+    }
+  ],
+  "defaultEmulator": "gambatte"
+}

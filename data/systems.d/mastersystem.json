@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "id": "mastersystem",
+  "label": "Master System",
+  "fullName": "Sega Master System",
+  "category": "emulators",
+  "order": 70,
+  "icon": "cartridge",
+  "tint": "#ff5a5a",
+  "extensions": [
+    "sms",
+    "zip",
+    "7z"
+  ],
+  "romDirs": [
+    "~/ROMs/mastersystem"
+  ],
+  "emulators": [
+    {
+      "id": "genesisplusgx",
+      "label": "Genesis Plus GX (RetroArch)",
+      "type": "retroarch",
+      "core": "genesis_plus_gx"
+    },
+    {
+      "id": "picodrive",
+      "label": "PicoDrive (RetroArch)",
+      "type": "retroarch",
+      "core": "picodrive"
+    }
+  ],
+  "defaultEmulator": "genesisplusgx"
+}

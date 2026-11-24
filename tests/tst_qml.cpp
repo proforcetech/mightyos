@@ -28,7 +28,16 @@ public:
 
     Q_INVOKABLE bool write(const QString &relativePath, const QString &content)
     {
-        const QString base = qEnvironmentVariable("XDG_DATA_HOME");
+        return writeIn("XDG_DATA_HOME", relativePath, content);
+    }
+    // Same, under XDG_CONFIG_HOME (per-profile allowed.json, ...).
+    Q_INVOKABLE bool writeConfig(const QString &relativePath, const QString &content)
+    {
+        return writeIn("XDG_CONFIG_HOME", relativePath, content);
+    }
+    bool writeIn(const char *var, const QString &relativePath, const QString &content)
+    {
+        const QString base = qEnvironmentVariable(var);
         if (base.isEmpty() || relativePath.isEmpty() || QDir::isAbsolutePath(relativePath)
             || QDir::cleanPath(relativePath) != relativePath || relativePath.startsWith(QLatin1String("..")))
             return false;

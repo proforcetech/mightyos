@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "genesis",
+  "label": "Genesis",
+  "fullName": "Sega Genesis / Mega Drive",
+  "category": "emulators",
+  "order": 71,
+  "icon": "cartridge",
+  "tint": "#3d8bff",
+  "extensions": [
+    "md",
+    "gen",
+    "smd",
+    "bin",
+    "zip",
+    "7z"
+  ],
+  "romDirs": [
+    "~/ROMs/genesis"
+  ],
+  "emulators": [
+    {
+      "id": "genesisplusgx",
+      "label": "Genesis Plus GX (RetroArch)",
+      "type": "retroarch",
+      "core": "genesis_plus_gx"
+    },
+    {
+      "id": "picodrive",
+      "label": "PicoDrive (RetroArch)",
+      "type": "retroarch",
+      "core": "picodrive"
+    }
+  ],
+  "defaultEmulator": "genesisplusgx"
+}

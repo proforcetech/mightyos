@@ -2,18 +2,24 @@
 
 A console-style launcher for Ubuntu with large tiles, built for a TV
 ("10-foot") setup and for keyboard, mouse or gamepad. See `PLAN.md` for the
-full plan. This is milestone **M3, gamepad & TV remote**: any number of
-SDL3 gamepads (hotplug, repeat, rumble, Xbox / PlayStation / Nintendo
-button glyphs), the Guide button, and an HDMI-CEC TV remote, on top of M2's
-installed apps, profiles, favorites and artwork. Systems and games are
-still a mock library until M4.
+full plan. This is milestone **M4, emulators & Steam library**: system
+definitions (`systems.d`), a ROM scanner with an SQLite cache, launching
+through RetroArch or standalone Flatpak emulators with a per-game emulator
+choice, Steam as a system (`appmanifest_*.acf`, `steam://rungameid`, exit
+detection), opt-in SteamGridDB artwork, A–Z jumping in game grids and kids
+profiles that only see allowed games. It builds on M3 (SDL3 gamepads,
+Guide, HDMI-CEC remote) and M2 (apps, profiles, favorites, artwork).
 
 ## Build
 
-Requirements: Qt >= 6.8 (Core, Gui, Qml, Quick, Concurrent, Test, QuickTest), SDL >= 3.2
-(Ubuntu: `libsdl3-dev`), CMake >= 3.21, Ninja and a C++20 compiler. At run
+Requirements: Qt >= 6.8 (Core, Gui, Qml, Quick, Concurrent, Sql, Network, Test, QuickTest),
+SDL >= 3.2 (Ubuntu: `libsdl3-dev`), CMake >= 3.21, Ninja and a C++20 compiler. At run
 time the Qt SVG image plugin is needed for the icons and button glyphs
-(Ubuntu: `qt6-svg-plugins`). HDMI-CEC uses the kernel headers
+(Ubuntu: `qt6-svg-plugins`) and the Qt SQLite driver for the library cache
+(Ubuntu: `libqt6sql6-sqlite`; without it MightyOS runs, just without a cache).
+Optional: `libsecret-1-dev` at build time stores the SteamGridDB API key in
+the Secret Service instead of a 0600 file (`-DMIGHTYOS_WITH_LIBSECRET=OFF`
+forces the file). HDMI-CEC uses the kernel headers
 (`linux/cec.h`) only; libcec is not used.
 
 ```sh
@@ -25,7 +31,8 @@ Ninja compile jobs are capped by RAM (about one job per GB, see
 `MIGHTYOS_COMPILE_JOBS`), because Qt's AOT-compiled QML is memory-hungry.
 Override the cap with `-DMIGHTYOS_COMPILE_JOBS=N`. Turn the tests off with
 `-DMIGHTYOS_BUILD_TESTS=OFF`. `-DMIGHTYOS_DEV_TOOLS=OFF` removes the
-development-only `--fake-cec` options (input from stdin or a FIFO); it is
+development-only `--fake-cec` (input from stdin or a FIFO) and
+`--mock-library` options; it is
 ON while MightyOS is in development and **must be OFF in packaged builds**
 (M6). Even when built in, `mightyos` refuses `--fake-cec` inside the
 MightyOS session (`XDG_SESSION_DESKTOP=mightyos`).
@@ -39,11 +46,14 @@ MightyOS session (`XDG_SESSION_DESKTOP=mightyos`).
 QT_QPA_PLATFORM=offscreen ./build/mightyos   # headless smoke test
 ./build/mightyos --no-gamepad --no-cec       # keyboard and mouse only
 ./build/mightyos --fake-cec fifo             # fake TV remote, see "TV remote"
+./build/mightyos --mock-library              # bundled fake library; games run the test app
 ./build/mightyos-inputtest --seconds 30      # no GUI: print pads and actions
 ```
 
 The default switches to fullscreen in M6, when MightyOS becomes its own
-session. With one profile MightyOS opens straight on Home; with two or more
+session. `--fullscreen` maps the window normally first and goes fullscreen
+after the first frame (cage 0.2.1 / wlroots 0.19 abort on a fullscreen
+request before the surface's first commit). With one profile MightyOS opens straight on Home; with two or more
 it asks "Who's playing?" first, with the last used profile preselected.
 Each profile reopens on the screen and tile it left.
 
@@ -51,7 +61,15 @@ Each profile reopens on the screen and tile it left.
 
 | Path | What |
 |---|---|
-| `$XDG_CONFIG_HOME/mightyos/settings.json` | global settings: `{ "version": 1, "rumble": true, "tvRemote": "navigation" }` |
+| `$XDG_CONFIG_HOME/mightyos/settings.json` | global settings: `{ "version": 1, "rumble": true, "tvRemote": "navigation", "showAllSystems": false }` |
+| `/usr/share/mightyos/systems.d/*.json`, `$XDG_CONFIG_HOME/mightyos/systems.d/*.json` | system definitions (below); the user's replace the installed ones by id |
+| `$XDG_CONFIG_HOME/mightyos/profiles/<id>/emulators.json` | that profile's emulator choices per game / per system |
+| `$XDG_CONFIG_HOME/mightyos/profiles/<id>/allowed.json` | kids profiles: `{ "version": 1, "systems": [ids], "games": [keys] }` (no file: nothing allowed) |
+| `$XDG_CONFIG_HOME/mightyos/secrets/steamgriddb.key` | the SteamGridDB API key when libsecret isn't used (dir 0700, file 0600) |
+| `$XDG_DATA_HOME/mightyos/profiles/<id>/saves/<system>/` | game saves and states (RetroArch, `{saves}` emulators); Flatpak RetroArch keeps them in `~/.var/app/org.libretro.RetroArch/data/mightyos/profiles/<id>/` |
+| `$XDG_DATA_HOME/mightyos/artwork/` | SteamGridDB images (`<sha1(key)>.png/jpg`, `index.json`), LRU-trimmed to 256 MiB |
+| `$XDG_CACHE_HOME/mightyos/library.sqlite` | ROM scan cache, shared by all profiles (safe to delete) |
+| `~/ROMs/<system>/` | default ROM folders |
 | `$XDG_CONFIG_HOME/mightyos/gamecontrollerdb.txt` | optional extra SDL controller mappings (regular file, max 2 MiB) |
 | `$XDG_CONFIG_HOME/mightyos/profiles.json` | profiles (id, name, avatar, colour, kind, createdAt, lastUsed) |
 | `$XDG_CONFIG_HOME/mightyos/profiles/<id>/favorites.json` | that profile's favorites, in order |
@@ -132,6 +150,86 @@ QT_LOGGING_RULES="mightyos.input.debug=true" ./build/mightyos
 
 Logs contain ids and counts, never command lines.
 
+### Library (emulators and Steam)
+
+Systems come from `systems.d`: built in (a copy of `data/systems.d`), then
+`$XDG_DATA_DIRS/mightyos/systems.d` (installed: `/usr/share/...`), then
+`$XDG_CONFIG_HOME/mightyos/systems.d`; a later file with the same id
+replaces the earlier one, `{ "version": 1, "id": "n64", "disabled": true }`
+hides one. The defaults cover NES, SNES, N64, Game Boy / Color / Advance,
+DS, 3DS, GameCube, Wii, Master System, Genesis, Saturn, Dreamcast, Arcade
+(FinalBurn Neo / MAME), PS1, PS2, PSP and Steam. Example:
+
+```json
+{ "version": 1, "id": "gamecube", "label": "GameCube", "fullName": "Nintendo GameCube",
+  "category": "emulators", "order": 60, "icon": "disc", "tint": "#8a6bd1",
+  "extensions": ["iso", "gcm", "gcz", "rvz", "ciso", "m3u"],
+  "romDirs": ["~/ROMs/gamecube"],
+  "emulators": [
+    { "id": "dolphin", "label": "Dolphin", "type": "flatpak",
+      "app": "org.DolphinEmu.dolphin-emu", "args": ["-b", "-e", "{rom}"] },
+    { "id": "x", "label": "X", "type": "retroarch", "core": "dolphin" } ],
+  "defaultEmulator": "dolphin" }
+```
+
+Validation is strict (unknown keys, wrong types, path-like ids, relative
+ROM dirs reject the file), and a definition (and its directory) must belong
+to you or root and not be writable by group or others; a user file that
+replaces an installed definition is logged. Emulator types: `retroarch` (`core`; native
+`retroarch` with cores from `~/.config/retroarch/cores` or
+`/usr/lib/*/libretro`, else Flatpak `org.libretro.RetroArch` with cores in
+its own config dir), `flatpak` (`app` + `args`) and `native` (`program` +
+`args`). `{rom}` (exactly once), `{saves}` (the profile's save folder) and
+`{appdata}` (a per-profile folder inside a Flatpak's own data dir, e.g.
+Dolphin's `-u` user folder) are replaced only as whole arguments; there is
+never a shell. RetroArch gets an `--appendconfig` from
+`$XDG_STATE_HOME/mightyos/profiles/<id>/retroarch/` (Flatpak: mounted
+read-only) with fullscreen, the profile's save and state folders, network
+and netplay features off, and kiosk mode for kids profiles. PS1 defaults to
+RetroArch's Beetle PSX HW; DuckStation (an unverified community Flatpak)
+remains a choice. See PLAN section 4 for which emulators keep saves per
+profile.
+
+The cache is read at startup before the saved screen is restored, so game
+grids reopen on the same game. A ROM folder that is missing (an unplugged
+drive) keeps its games, marked "Not connected", instead of emptying the
+grid. ROMs are scanned on a worker thread (depth 4, symlinks only if they stay
+inside the ROM folder, regular files only, hidden entries skipped) and cached
+in `library.sqlite`, so grids fill instantly at the next start and a re-scan
+only writes what changed. Titles are cleaned from file names (region and
+revision tags become details: "Legend of Zelda, The (USA) (Rev 1)" shows as
+"The Legend of Zelda"). Multi-disc games: an `.m3u` is the game and hides its
+discs, a `.cue` hides its tracks, "(Disc 1)/(Disc 2)" files without a
+playlist become one game. Re-scans: Options > Scan for games, and
+automatically when a ROM folder (top level) or a Steam library changes.
+
+Steam: native (`~/.steam/steam`, `~/.local/share/Steam`) and Flatpak roots,
+every library in `libraryfolders.vdf`, installed games only, without Proton,
+runtimes and redistributables, art from Steam's own library cache. A Steam
+game launches with `steam steam://rungameid/<appid>` (or `flatpak run
+com.valvesoftware.Steam ...`). Because that command exits immediately, the
+end of the game is detected by polling (2 s) `registry.vdf`'s
+`RunningAppID` and, as a fallback, a process with `SteamAppId=<appid>` in
+its environment, which must agree with the registry (PLAN D20). While Steam
+is still starting the game the overlay says so; holding Guide gives the
+screen back at any time during a Steam launch; after 2 minutes without the
+game MightyOS returns by itself. Kids profiles: Steam is closed
+(`steam -shutdown`) after the game.
+
+Emulators / Games show only systems with games, then a "+N more" tile
+(Options > Show all systems / Hide systems without games). An empty grid
+says where its files go. Options on a game: Emulator… (this profile's
+choice for that game; on a system tile: the default for the system),
+Details. A missing emulator gives a toast like "Install Dolphin from the App
+Store to play this game." Nothing is installed automatically.
+
+Artwork (Settings > Artwork): enter your own SteamGridDB API key (a plain
+text field; there is no on-screen keyboard before M7, so this needs a
+keyboard). It is then shown masked only. Without a key nothing is
+requested. With one, grids you open fetch box art in the background (one
+request at a time, about one API call per second, exponential backoff,
+paused while a game runs); failures just leave the tinted tile.
+
 ## Test
 
 ```sh
@@ -144,7 +242,13 @@ cmake --build build --target all_qmllint      # QML lint
 | `tst_launcher` | environment allowlist, launch/exit/exit code, crash (`--crash` -> -1), launch guards |
 | `tst_inputrouter` | key table (incl. Ctrl+Home / HomePage = Guide), repeat policy, mute window, blocked, cross-thread `postAction` and its pending counter, `guideHeld` bypassing blocked/mute, pad style and device notices, rumble policy (bump once per hold), remote trust levels and restricted contexts, secure entry logs nothing (captured log), device-name sanitising and terminal escaping, mouse back button, text-field passthrough, cursor auto-hide |
 | `tst_navstate` | save/load round trip, corrupt and stale files, path truncation, profile paths, debounce/flush |
-| `tst_tilelistmodel` | model contract (roles, `indexOfKey`/`firstIndexForLetter` after reset, insert, remove, move; `get`; in-place updates), mock Library ids and structure |
+| `tst_tilelistmodel` | model contract (roles, `indexOfKey`/`firstIndexForLetter` after reset, insert, remove, move; `get`; in-place updates), diff-based `setItems` (no reset for added/removed rows, reset fallback for reordering/duplicates), batch insert/remove, letter groups and LT/RT steps, a 20k-row diff, mock Library ids and structure |
+| `tst_keyvalues` | VDF/ACF parser: Steam manifests and library folders, escapes, comments, conditionals, BOM, duplicates, malformed input, size/token/node/depth limits, 100k-deep input without recursion |
+| `tst_systems` | built-in definitions cover the D9 targets, strict rejection (ids, unknown keys, bidi labels, partial/unknown/duplicate placeholders, bad Flatpak ids, relative programs and dirs), whole-element substitution, layers/override/disable, symlinked definitions ignored, RetroArch native/Flatpak/core-missing/not-installed plans, Flatpak and native plans, Steam plans |
+| `tst_romscanner` | title cleaning, ids, symlinks escaping the root rejected (and inner ones followed, loops broken), FIFOs skipped, depth limit, `.m3u`/`.cue`/"(Disc N)" handling, incremental reuse, launch-time path re-check, SQLite round trip and diff, bad rows and a garbage or symlinked cache file, 20k ROMs (scan, cache, rescan) |
+| `tst_steam` | manifests (installed only, appid checks), tools skipped, sanitised names, root dedup through symlinks, library folders, Flatpak path mapping, old and new librarycache art, registry and process-environment checks, the run tracker (start, lagging registry, exit, timeout) and Launcher hand-over, failure and stopWaiting |
+| `tst_library` | the real Library on temp dirs: models from scan, "+N more", Steam, ids never paths, the cache serving the next start, re-scan as a diff with one debounced `changed`, show all, kids profiles (nothing without allowed.json, then only what it allows), per-profile emulator choice, launching (runs, missing emulator, missing Steam, vanished file), deleting a profile keeps or deletes saves |
+| `tst_scraper` | API key: validation, mask, 0600 file in a 0700 dir, refuses group/other-readable files, symlinked files and dirs; host allowlist, URL building (term is one path segment), JSON parsing of hostile responses, image validation; scraper with a scripted fetcher: no key no requests, full flow with the key only on API calls, Steam by appid, invalid images dropped, 401 stops until a new key, 429/503/offline backoff, negative cache, LRU disk budget and orphan cleanup |
 | `tst_desktopentry` | `Exec=` parsing per the spec (quotes, escapes, `%f %F %u %U %i %c %k %%`, deprecated codes, rejected shell syntax and malformed values), file parsing, locales, lists |
 | `tst_appregistry` | desktop-file-id precedence, Hidden/NoDisplay/TryExec/OnlyShowIn/NotShowIn/Terminal, subdirectory ids, Flatpak ids, icon validation, oversized/broken files, manifests and their validation, async scan, watcher re-scan (incl. a dir created later), no argv in logs |
 | `tst_profiles` | first run, create/rename/appearance/kind, delete (with its data) and last-profile protection, startup rule, last-used ordering, invalid ids in the file, corrupt file, failed atomic write, M1 navstate migration |
@@ -155,7 +259,7 @@ cmake --build build --target all_qmllint      # QML lint
 | `tst_cec` | CEC UI command mapping, key names, key message parsing (broadcast key frames dropped), follower replies (OSD name, power, menu, deck status, Feature Abort for unknown directed opcodes, active source only after `<Set Stream Path>` to us, nothing for broadcasts), remote repeat without acceleration, lost release stops scrolling within ~0.5 s, late refresh resumes, Root Menu, latch, the fake backend end to end into InputRouter on a fake clock (deterministic), "only Guide while running", press rate limit, removal notices (device lost, stop), FIFO and runtime-dir checks, no device and non-CEC devices refused, libcec stub |
 | `tst_settings` | defaults, rumble and tvRemote round trips, unknown keys kept, parse errors moved aside, newer versions read but never written, unreadable files left alone, failed writes |
 | `tst_artwork` | icon theme lookup (inheritance, best size, SVG preference, pixmaps), decode at the requested size, memory and disk cache hits, re-decode on change, untrusted specs, async responses |
-| `tst_qml` | Qt Quick Test: `tst_tilerow.qml`, `tst_tilegrid.qml` (edges, bump, hover incl. a scrolled row under a resting cursor, click, wheel, paging, letter jump, icon rasterising), `tst_navstack.qml` (routing, bubbling, inert screens during transitions, system stepping, stable prompts, restoring stale paths, per-category positions), `tst_main.qml` (whole window: blocked while running, focus restore, 300 ms mute, crash toast, modal focus trap, Dialog defaults), `tst_profiles.qml` (picker only with 2+ profiles, last used preselected, switching resets and restores the stack, X toggles favorites that appear in order, reordering, unavailable favorites, a launch fills Recent, create/edit/delete in the picker), `tst_promptbar.qml` (glyph style per device: keys, Xbox, PlayStation, Nintendo by position, remote with named colour keys; every glyph has an accessible name; theme-scaled), and in `tst_main.qml` Guide (Home from anywhere, closes menus/dialogs safely, blocked while running, `guideHeld` then a toast after exit), the Controllers vibration and TV remote toggles (not answerable from the remote), remote navigation-only mode and remote-restricted confirmations, rumble on bumps/errors only after gamepad input, connect/disconnect toasts, every Text in the window is plain text, markup in a device name is shown literally |
+| `tst_qml` | Qt Quick Test: `tst_tilerow.qml`, `tst_tilegrid.qml` (edges, bump, hover incl. a scrolled row under a resting cursor, click, wheel, paging, letter jump, icon rasterising), `tst_navstack.qml` (routing, bubbling, inert screens during transitions, system stepping, stable prompts, restoring stale paths, per-category positions), `tst_main.qml` (whole window: blocked while running, focus restore, 300 ms mute, crash toast, modal focus trap, Dialog defaults), `tst_profiles.qml` (picker only with 2+ profiles, last used preselected, switching resets and restores the stack, X toggles favorites that appear in order, reordering, unavailable favorites, a launch fills Recent, create/edit/delete in the picker), `tst_library.qml` (A–Z: typed letters and LT/RT letter steps with the letter badge, letters aren't actions; kids profiles; deleting a profile with saves defaults to keeping them; Settings > Artwork key entry: secure entry, invalid key refused, masked after saving, Esc cancels), `tst_promptbar.qml` (glyph style per device: keys, Xbox, PlayStation, Nintendo by position, remote with named colour keys; every glyph has an accessible name; theme-scaled), and in `tst_main.qml` Guide (Home from anywhere, closes menus/dialogs safely, blocked while running, `guideHeld` then a toast after exit), the Controllers vibration and TV remote toggles (not answerable from the remote), remote navigation-only mode and remote-restricted confirmations, rumble on bumps/errors only after gamepad input, connect/disconnect toasts, every Text in the window is plain text, markup in a device name is shown literally |
 
 Tests run with `XDG_CONFIG_HOME`, `XDG_STATE_HOME`, `XDG_DATA_HOME`,
 `XDG_CACHE_HOME` and `XDG_DATA_DIRS` under `build/test-xdg/`, which a ctest
@@ -169,14 +273,20 @@ never see the system's `.desktop` files.
 | Move focus | Arrow keys | Move the pointer over a tile | D-pad / left stick | Arrows |
 | Select / open / play | Enter, Space | Left click (acts on the clicked tile) | A (Cross; B on Nintendo) | OK / Select, Enter |
 | Back | Esc, Backspace | Back button, a breadcrumb, the "Back" prompt | B (Circle; A on Nintendo) | Back / Exit |
-| Options (context menu) | M, Menu | Right click | Start / Menu (Options; +) | Red, Contents Menu |
-| Favorite (toggle; games, apps, systems) | F | Context menu | X (Square; Y on Nintendo) | Blue |
+| Options (context menu) | Tab, Menu, Shift+F10 | Right click | Start / Menu (Options; +) | Red, Contents Menu |
+| Favorite (toggle; games, apps, systems) | Insert, Ctrl+D | Context menu | X (Square; Y on Nintendo) | Blue |
 | Search (M7) | `/`, Ctrl+F | | Y (Triangle; X on Nintendo) | Yellow |
-| Quick panel (M8) | Q | Click the clock | Back / View (Create; −) | Green, Setup Menu |
+| Quick panel (M8) | F12 | Click the clock | Back / View (Create; −) | Green, Setup Menu |
 | Previous / next category (in a game grid: previous / next system) | PgUp / PgDn | Click a category | LB / RB (L1/R1; L/R) | Rewind / Fast forward |
-| Page up / down in grids | Home / End | Wheel | LT / RT (L2/R2; ZL/ZR) | Channel up / down |
+| Game grids: previous / next letter (A–Z); other grids: page | Home / End | Wheel | LT / RT (L2/R2; ZL/ZR) | Channel up / down |
+| Jump to a letter (game grids, All apps) | A–Z, 0–9 | | | |
 | Home (Favorites) | Ctrl+Home, HomePage key | | Guide (Xbox / PS / Home button) | Home / Root Menu |
 | Guide overlay while a game runs (M6) | | | hold Guide 1 s | Home / Root Menu |
+
+Letter keys are never actions (M4): F, M and Q used to be Favorite, Options
+and Quick panel, which made typing "M" in a game list open a menu. Now every
+bare letter or digit jumps to the first title starting with it, and the
+actions moved to keys that aren't letters.
 
 The TV remote column assumes Settings > Controllers > TV remote = **full**.
 The default is **navigation only** (move, OK, Back, Channel, Rewind /
@@ -209,7 +319,8 @@ keys.
 - LB/RB returns to Home and switches category, except in a system's game
   grid, where it steps to the previous/next system (SNES -> N64) in place.
 - Apps launch with the command from their `.desktop` file or manifest.
-  Games (mock until M4) launch the bundled test app. While something runs,
+  Games launch with their emulator or Steam (with `--mock-library`: the
+  bundled test app). While something runs,
   MightyOS ignores input and shows an overlay; controllers keep working in
   the game (MightyOS never grabs them), and only a held Guide reaches
   MightyOS (it will open the Guide overlay in M6; for now a toast mentions
@@ -217,7 +328,7 @@ keys.
   input stays muted for 300 ms; whatever was still held in the game does
   nothing until it is released. Successful launches
   appear in the "Recent" row on Home > Favorites.
-- Favorites: X / F toggles the focused game, app or system (a star shows on
+- Favorites: X / Insert toggles the focused game, app or system (a star shows on
   its tile). Home > Favorites and the Favorites screen show them in your
   order. Options > Move left / Move right reorders them. A favorite whose
   app or game is gone stays as a greyed "Unavailable" tile; Accept on it
@@ -226,8 +337,14 @@ keys.
   on the profile in the top bar. The picker creates profiles (pick a name
   from suggestions, an avatar, a colour and Standard/Kids), renames or
   re-styles them, and deletes them (after a confirmation; the last one
-  can't be deleted). Kids profiles get a badge; their restrictions arrive
-  in M8. Settings > All apps lists every app the registry found.
+  can't be deleted; if it has game saves you choose between "Delete, keep
+  saves" and "Delete with saves", and Back cancels). Kids profiles get a
+  badge and only see the systems and games in their `allowed.json` (an
+  editor arrives in M8); they have no App Store, Settings, All apps or
+  Artwork, and can't open the profile picker ("Ask a parent": leaving needs
+  the PIN, which arrives in M8). A kids profile used last starts without the
+  picker. This is a UI restriction, not a security boundary (PLAN
+  section 4). Settings > All apps lists every app the registry found.
 
 - Controllers: any number, plugged in or out at any time (a toast says so;
   not for those present at startup). Settings > Controllers lists them and
@@ -391,7 +508,8 @@ line per controller change and per action:
 
 ```
 CMakeLists.txt
-data/mock/library.json  mock systems + games (same ids as M1), until M4
+data/mock/library.json  mock systems + games (tests, --mock-library)
+data/systems.d/      default system definitions (built in and installed)
 docs/ui-mockups.md   screen mockups and focus maps
 src/                 C++, static library mightyos_core = QML module MightyOS.Core
   main.cpp           CLI, engine, image provider, attaches InputRouter to the window,
@@ -414,7 +532,18 @@ src/                 C++, static library mightyos_core = QML module MightyOS.Cor
   navstate.{h,cpp}   focus-path persistence (navstate.json), per profile
   soundfx.{h,cpp}    UI sounds API (no-op stub until QtMultimedia is available)
   tilelistmodel.{h,cpp} the model contract every row/grid uses
-  library.{h,cpp}    systems + games (mock JSON until M4)
+  library.{h,cpp}    systems + games: registry, scan worker, cache, Steam, kids filter,
+                     emulator choice, launching (or the mock JSON)
+  systemregistry.{h,cpp} systems.d parsing, validation, layers
+  romscanner.{h,cpp} ROM walk, title cleaning, multi-disc, launch-time path check
+  librarycache.{h,cpp} library.sqlite (QtSql)
+  keyvalues.{h,cpp}  Valve KeyValues (VDF/ACF) parser with limits
+  steamlibrary.{h,cpp} Steam roots, libraries, manifests, art, running checks
+  steamtracker.{h,cpp} Steam game exit detection (LaunchTracker)
+  emulatorlaunch.{h,cpp} RetroArch / Flatpak / native / Steam argv planning
+  apikeystore.{h,cpp} SteamGridDB key: libsecret or a 0600 file
+  steamgriddb.{h,cpp} HTTPS fetcher (allowlist, caps), API helpers, image checks
+  artworkscraper.{h,cpp} Scraper singleton: queue, rate limit, backoff, disk LRU
   desktopentry.{h,cpp} Desktop Entry parser, Exec= -> argv without a shell
   appscanner.{h,cpp} .desktop + manifest scanning (pure, runs on a worker)
   appregistry.{h,cpp} installed apps: async scan, watcher, models, argv
@@ -428,7 +557,8 @@ qml/                 static library mightyos_ui = QML module MightyOS.UI
   Main.qml           window, safe area, top bar, startup rule, routing to modals / picker / NavStack
   NavStack.qml       screen stack, action routing, focus path save/restore
   NavScreen.qml      base type for screens (handleAction, save/restoreState, favorites)
-  screens/           HomeScreen, SystemListScreen, GameGridScreen, CategoryScreen, AppListScreen
+  screens/           HomeScreen, SystemListScreen, GameGridScreen, CategoryScreen, AppListScreen,
+                     ArtworkScreen
   ProfilePicker, ProfileEditor, ChoiceRow, ProfileChip   profiles UI
   Tile, TileRow, TileGrid, CategoryBar, FocusRing, PointerArea, WheelStepper
   PromptBar, ButtonGlyph (+ Glyphs.js: per-device glyphs), Breadcrumb, InfoHeader, ContextMenu, Dialog, Toast, Clock,
@@ -439,7 +569,8 @@ tools/inputtest.cpp  mightyos-inputtest: prints pads, remote and actions (no GUI
 tests/               tst_launcher, tst_inputrouter, tst_navstate, tst_tilelistmodel,
                      tst_desktopentry, tst_appregistry, tst_profiles, tst_favorites,
                      tst_artwork, tst_padinput, tst_padhub, tst_gamepadservice, tst_cec,
-                     tst_settings, tst_qml + qml/
+                     tst_settings, tst_keyvalues, tst_systems, tst_romscanner, tst_steam,
+                     tst_library, tst_scraper, tst_qml + qml/
 ```
 
 ### Input pipeline
@@ -465,13 +596,14 @@ scrolls past where the user let go. The threads are joined on
 
 ```
 .desktop files, manifests --AppScanner (worker thread)--> AppRegistry --+
-data/mock/library.json ---------------------------------> Library -----+--> TileListModel --> TileRow / TileGrid
+systems.d + ROM dirs + Steam --scan worker (+ library.sqlite)--> Library -+--> TileListModel --> TileRow / TileGrid
 favorites.json / history.json --(keys)--> Favorites / History ---------+        (key, title, subtitle, icon,
                                   (resolved via AppRegistry + Library)            artwork, kind, available, ...)
-icon names / paths --> image://art/<id> --> ArtworkProvider (worker, disk + memory cache) --> Tile
+icon names / paths, Steam art, SteamGridDB files --> image://art/<id> --> ArtworkProvider (worker, disk + memory cache) --> Tile
 ```
 
 Rows never loop over a model in JavaScript: `indexOfKey()` is hash-backed,
-`get(i)` returns one row, and `firstIndexForLetter()` runs in C++. A model
-reset (re-scan, profile switch) keeps the focus on the same key; a moved
-favorite keeps its focus.
+`get(i)` returns one row, and `firstIndexForLetter()` / `letterStep()` run
+in C++. `setItems()` is a diff, so a re-scan that adds or removes games
+inserts and removes rows instead of resetting; a real reset (reordering) keeps
+the focus on the same key, and a moved favorite keeps its focus.

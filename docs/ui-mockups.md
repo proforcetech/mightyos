@@ -20,7 +20,7 @@ mock data until M4.
 | | NES  | | SNES | | N64  | | PS1  | | PS2  | | PSP  | | Game...  (runs   |
 | +------+ +------+ +------+ +------+ +------+ +------+ +-----   off-edge) |
 |                                                                          |
-| [Enter] Open   [M] Options   [PgUp PgDn] Category                        |  PromptBar
+| [Enter] Open   [Tab] Options [PgUp PgDn] Category                        |  PromptBar
 +--------------------------------------------------------------------------+
 ```
 
@@ -67,7 +67,7 @@ favorites, Down goes straight to Recent). Options on a favorite: Launch,
 Move left / Move right (only where possible), Remove from Favorites,
 Details. The moved tile keeps the focus. Accept on an "Unavailable" tile
 opens a Keep (default) / Remove dialog. With no favorites the info line
-reads "Press X (F) on any game, app or system to pin it here".
+reads "Press X (Insert) on any game, app or system to pin it here".
 
 Accept on the Favorites category opens the Favorites grid (GameGrid with
 `{ collection: "favorites" }`): the same order and options as a poster
@@ -83,12 +83,22 @@ grid; LB/RB keep their global meaning there.
 | +------+ #========# +------+ +------+ +------+ +------+ +-----           |
 | | NES  | # SNES   # | N64  | | PS1  | | PS2  | | PSP  | | Game...        |
 | +------+ #========# +------+ +------+ +------+ +------+ +-----           |
-| [Enter] Open   [Esc] Back   [M] Options                                  |
+| [Enter] Open   [Esc] Back   [Tab] Options                                |
 +--------------------------------------------------------------------------+
 ```
 
 Left/Right move, Accept opens GameGrid, Back returns to Home (exact tile),
-LB/RB return to Home and switch category.
+LB/RB return to Home and switch category. M4: only systems that have games
+are listed, followed by a "+N more" tile (Accept shows every system;
+Options > Hide systems without games turns it back). A kids profile sees
+only its allowed systems; with none the header says "Nothing is allowed for
+this profile yet. Ask a parent."
+
+```
+| #========# +------+ +------+ +--------+
+| #  SNES  # | PS1  | | Steam| |  + 12  |   <- "+N more" (kind showall), last tile
+| #========# +------+ +------+ +--------+
+```
 
 ## GameGrid (depth 3)
 
@@ -102,16 +112,37 @@ LB/RB return to Home and switch category.
 |   | Galaxy| | Gear  | #Haunted# | Hyper | | Iron  | | Jungle| |Kingdom|  |
 |   +-------+ +-------+ #=======# +-------+ +-------+ +-------+ +-------+  |
 |   +-------+ +-------+ +-------+ +-------+ +-------+ +-------+ +-------+  |
-| [Enter] Play [Esc] Back [M] Options [Home End] Page [PgUp PgDn] System   |
+| [Enter] Play [Esc] Back [Tab] Options [Home End] A–Z [PgUp PgDn] System  |
 +--------------------------------------------------------------------------+
 ```
+
+A–Z jump (M4). After a jump a large letter shows over the grid for a
+moment:
+
+```
+|   +-------+ +-------+ +-------+ +-------+ +-------+ +-------+ +-------+  |
+|   | Galaxy| | Gear  | |  +-------------+  | Iron  | | Jungle| |Kingdom|  |
+|   +-------+ +-------+ +--|      H      |--+-------+ +-------+ +-------+  |
+|   #=======# +-------+ +--|             |--+-------+ +-------+ +-------+  |
+|   #Haunted# | Hyper | |  +-------------+  | Ice   | | Jet   | | Joust |  |
+```
+
+Empty system grid: "No games yet. Put .sfc .smc .fig .swc files in
+~/ROMs/snes" (Steam: "No installed Steam games found ..."; while a scan
+runs: "Looking for games...").
 
 Focus map:
 
 ```
 Arrows: move; Left/Right bump at row ends (no wrap); Up from the first row
 bumps; Down into a partial last row lands on its last tile.
-Home/End (LT/RT): one page of visible rows up/down, same column.
+Home/End (LT/RT): previous / next letter group of the sorted titles (RT:
+first title of the next letter; LT: start of the current letter, then of
+the previous one; bump at either end). Typed letters/digits (keyboard):
+first title starting with that letter, or the next one after it. In the
+Favorites grid (your order, not sorted) LT/RT page instead.
+Options on a game: Emulator... (a second menu: the system's emulators,
+"current", "not installed", "Use the system default"), Details.
 PgUp/PgDn (LB/RB): previous/next system of the same category, in place:
 
    SystemList [NES][SNES][N64]...           Back from any of these grids
@@ -286,7 +317,7 @@ same prompt shows the button in the same place on every pad:
 
 ```
             Accept  Back   Favorite Search  Options  Quick   Category  Page
-keyboard    [Enter] [Esc]  [F]      [/]     [M]      [Q]     [PgUp][PgDn] [Home][End]
+keyboard    [Enter] [Esc]  [Ins]    [/]     [Tab]    [F12]   [PgUp][PgDn] [Home][End]
 xbox        (A)grn  (B)red (X)blu   (Y)yel  (=)menu  (view)  (LB)(RB)     /LT\/RT\
 playstation (x)     (o)    ([])     (/\)   (=)opt   (Create) (L1)(R1)    /L2\/R2\
 nintendo    (B)     (A)    (Y)      (X)     (+)      (-)     (L)(R)       /ZL\/ZR\

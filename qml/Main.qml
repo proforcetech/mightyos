@@ -25,11 +25,11 @@ Window {
     id: window
 
     property bool startFullscreen: false
-    // The argv every *game* launches (the bundled test app) until the real
-    // library arrives in M4. Apps launch with the argv AppRegistry parsed
-    // from their .desktop file / manifest. Tests set it to run the test app
-    // offscreen / with --crash.
-    property var launchCommand: Launcher.testAppCommand()
+    // Games launch through Library.launch() (emulator / Steam argv; the
+    // bundled test app in mock mode). Apps launch with the argv AppRegistry
+    // parsed from their .desktop file / manifest. Tests set launchCommand
+    // to make every game run the test app offscreen / with --crash.
+    property var launchCommand: []
 
     // The screen and focus state to return to when the running app exits.
     property NavScreen launchScreen: null
@@ -49,7 +49,21 @@ Window {
     minimumWidth: 640
     minimumHeight: 360
     visible: true
-    visibility: startFullscreen ? Window.FullScreen : Window.Windowed
+    // Always map windowed first; go fullscreen after the first frame. Asking
+    // for fullscreen before the surface's initial commit makes cage 0.2.1
+    // (wlroots 0.19) abort in wlr_xdg_surface_schedule_configure.
+    visibility: Window.Windowed
+    property bool _fullscreenRequested: false
+    Connections {
+        target: window
+        // Disconnected (disabled) once the request is out: no handler per frame.
+        enabled: window.startFullscreen && !window._fullscreenRequested
+        function onFrameSwapped() {
+            window._fullscreenRequested = true
+            // Queued: not from inside the render loop's swap notification.
+            Qt.callLater(() => window.visibility = Window.FullScreen)
+        }
+    }
     title: qsTr("MightyOS")
     color: Theme.background
 
@@ -58,6 +72,9 @@ Window {
     Binding { target: InputRouter; property: "blocked"; value: Launcher.running }
     Binding { target: InputRouter; property: "cursorHideDelay"; value: Theme.cursorHideDelay }
     Binding { target: InputRouter; property: "rumbleEnabled"; value: Settings.rumble }
+    Binding { target: Library; property: "showAllSystems"; value: Settings.showAllSystems }
+    // No artwork downloads while a game runs (bandwidth, CPU).
+    Binding { target: Scraper; property: "paused"; value: Launcher.running }
     // PLAN D18: TV remote trust level, and the contexts it may only cancel.
     Binding {
         target: InputRouter; property: "remoteMode"
@@ -128,13 +145,13 @@ Window {
     function launch(item: var) {
         if (Launcher.running)
             return   // never clobber the running app's launch state
-        const argv = item.kind === "app" ? AppRegistry.command(item.key) : launchCommand
-        if (!argv || argv.length === 0) {
-            if (item.kind === "app" && !AppRegistry.ready)
+        const isApp = item.kind === "app"
+        const argv = isApp ? AppRegistry.command(item.key) : launchCommand
+        if (isApp && (!argv || argv.length === 0)) {
+            if (!AppRegistry.ready)
                 toast.show(qsTr("Still looking for apps, try %1 again in a moment").arg(item.title), false)
             else
-                toast.show(item.kind === "app" ? qsTr("%1 is no longer installed").arg(item.title)
-                                               : qsTr("No test application found on this system"), true)
+                toast.show(qsTr("%1 is no longer installed").arg(item.title), true)
             return
         }
         launchScreen = navStack.current
@@ -144,7 +161,16 @@ Window {
         launchStarted = false
         guideHeldWhileRunning = false
         navStack.persistNow()
-        Launcher.launch(item.key, argv)
+        if (isApp || argv.length > 0) {
+            Launcher.launch(item.key, argv)
+            return
+        }
+        // A game: Library picks the emulator (or Steam) and calls Launcher.
+        const result = Library.launch(item.key)
+        if (!result.attempted) {
+            _returnFromLaunch()
+            toast.show(result.message, true)   // e.g. "Install Dolphin from the App Store ..."
+        }
     }
 
     // Makes `id` the active profile and rebuilds its navigation.
@@ -170,6 +196,12 @@ Window {
     function openProfilePicker() {
         if (Launcher.running || picker.open)
             return
+        if (Library.restricted) {
+            // PLAN D13: leaving a kids profile needs the PIN (M8). Until
+            // the PIN exists it isn't possible from the kids profile at all.
+            toast.show(qsTr("Ask a parent to switch profiles (the PIN arrives in M8)"), false)
+            return
+        }
         navStack.persistNow()              // the current profile's position is saved
         picker.show(false)
     }
@@ -207,6 +239,12 @@ Window {
         }
         function onGuideHeld(source) {
             // InputRouter logs it (mightyos.input); the overlay is M6.
+            // A Steam launch (tracked): Guide gives the screen back, whether
+            // the game was seen or not (the heuristics can be wrong).
+            if (Launcher.tracked) {
+                Launcher.stopTracking()
+                return
+            }
             if (Launcher.running)
                 window.guideHeldWhileRunning = true
         }
@@ -260,7 +298,9 @@ Window {
     }
 
     Component.onCompleted: {
-        if (ProfileService.pickerAtStartup)
+        // A kids profile used last starts directly: the picker would let
+        // anyone leave it without the PIN.
+        if (ProfileService.pickerAtStartup && ProfileService.active.kind !== "kids")
             picker.show(true)
         else
             enterProfile(ProfileService.activeId)
@@ -271,6 +311,7 @@ Window {
     Component { id: gameGridScreen; GameGridScreen {} }
     Component { id: categoryScreen; CategoryScreen {} }
     Component { id: appListScreen; AppListScreen {} }
+    Component { id: artworkScreen; ArtworkScreen {} }
 
     Item {
         id: inputRoot
@@ -358,7 +399,8 @@ Window {
                     systems: systemListScreen,
                     games: gameGridScreen,
                     category: categoryScreen,
-                    apps: appListScreen
+                    apps: appListScreen,
+                    artwork: artworkScreen
                 })
                 visible: !picker.open
                 focusShown: !window.modalOpen && !Launcher.running
@@ -439,6 +481,8 @@ Window {
             anchors.fill: parent
             active: Launcher.running
             launching: !window.launchStarted
+            waiting: Launcher.waiting
+            tracked: Launcher.tracked
             title: window.launchTitle
             iconName: window.launchIcon
         }

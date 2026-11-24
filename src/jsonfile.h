@@ -3,6 +3,7 @@
 #include <QByteArray>
 #include <QJsonObject>
 #include <QString>
+#include <QStringList>
 #include <optional>
 
 // Small, size-capped JSON object files written atomically (QSaveFile).
@@ -18,8 +19,24 @@ enum class ReadStatus { Ok, Missing, Invalid };
 // On failure `*error` (if given) is the errno of open()/read() (ENOENT
 // for a missing file, EACCES, EIO, ...), EINVAL for "not a regular file",
 // EFBIG for over `limit`, EAGAIN for "changed while reading".
+// `owner`/`mode`/`group` (if given) receive the opened file's st_uid /
+// st_mode / st_gid.
 std::optional<QByteArray> readRegularFile(const QString &path, qint64 limit, bool followSymlinks,
-                                          int *error = nullptr);
+                                          int *error = nullptr, uint *owner = nullptr, uint *mode = nullptr,
+                                          uint *group = nullptr);
+
+// Writes `data` to <base>/<subdirs...>/<name> without following any symlink
+// below `base` (PLAN section 4; for files other programs, e.g. a Flatpak
+// sandbox, could tamper with): every subdir is created 0700 with mkdirat()
+// and opened O_NOFOLLOW (a symlink there fails the write), must be ours
+// and gets group/other access removed; the data goes to a fresh
+// O_CREAT|O_EXCL|O_NOFOLLOW temporary, fchmod `mode`, fsync, then
+// renameat() over <name> (a symlink at <name> is replaced, never
+// followed). `base` itself must exist and be a directory (it may be a
+// symlink: the user's own XDG dir). Returns false and leaves nothing
+// behind on any failure.
+bool writePrivate(const QString &base, const QStringList &subdirs, const QString &name, const QByteArray &data,
+                  uint mode = 0600, QString *error = nullptr);
 
 // Renames `path` to `path + suffix` (replacing an older one), so an
 // unusable or newer-format file is kept for the user instead of being

@@ -70,7 +70,7 @@ Item {
         function test_keyboard() {
             useSource(InputRouter.Keyboard)
             compare(bar.glyphStyle, "keyboard")
-            compare(labels(), [["Enter"], ["Esc"], ["F"], ["/"], ["M"], ["PgUp", "PgDn"], ["Home", "End"]])
+            compare(labels(), [["Enter"], ["Esc"], ["Ins"], ["/"], ["Tab"], ["PgUp", "PgDn"], ["Home", "End"]])
             useSource(InputRouter.Mouse)
             compare(bar.glyphStyle, "keyboard")
         }

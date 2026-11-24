@@ -10,6 +10,8 @@ Rectangle {
     property string title
     property string iconName: "placeholder"
     property bool launching: false   // true until the process has started
+    property bool waiting: false     // a Steam launch waiting for its game
+    property bool tracked: false     // a Steam launch: Guide (held) returns
     property bool active: false
 
     color: Theme.scrim
@@ -72,7 +74,8 @@ Rectangle {
             textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
             text: overlay.launching ? qsTr("Launching %1…").arg(overlay.title)
-                                    : qsTr("%1 is running").arg(overlay.title)
+                : overlay.waiting ? qsTr("Waiting for Steam to start %1…").arg(overlay.title)
+                : qsTr("%1 is running").arg(overlay.title)
             color: Theme.text
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontTitle
@@ -82,7 +85,9 @@ Rectangle {
         Text {
             textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
-            text: qsTr("Close the app to return to MightyOS")
+            text: overlay.waiting ? qsTr("Hold the Guide button to stop waiting")
+                : overlay.tracked ? qsTr("Quit the game to return, or hold the Guide button")
+                : qsTr("Close the app to return to MightyOS")
             color: Theme.textDim
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontBody

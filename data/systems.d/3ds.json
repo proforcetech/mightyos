@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "id": "3ds",
+  "label": "3DS",
+  "fullName": "Nintendo 3DS",
+  "category": "emulators",
+  "order": 51,
+  "icon": "handheld",
+  "tint": "#d23c3c",
+  "extensions": [
+    "3ds",
+    "3dsx",
+    "cci",
+    "cxi",
+    "app"
+  ],
+  "romDirs": [
+    "~/ROMs/3ds"
+  ],
+  "emulators": [
+    {
+      "id": "azahar",
+      "label": "Azahar",
+      "type": "flatpak",
+      "app": "org.azahar_emu.Azahar",
+      "args": [
+        "-f",
+        "{rom}"
+      ]
+    }
+  ],
+  "defaultEmulator": "azahar"
+}

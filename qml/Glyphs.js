@@ -105,10 +105,10 @@ const remote = {
 const keyboard = {
     Accept:       _label("key", QT_TR_NOOP("Enter")),
     Back:         _label("key", QT_TR_NOOP("Esc")),
-    Favorite:     _label("key", "F"),
+    Favorite:     _label("key", QT_TR_NOOP("Ins")),
     Search:       _label("key", "/"),
-    Options:      _label("key", "M"),
-    QuickPanel:   _label("key", "Q"),
+    Options:      _label("key", QT_TR_NOOP("Tab")),
+    QuickPanel:   _label("key", "F12"),
     PrevCategory: _label("key", QT_TR_NOOP("PgUp")),
     NextCategory: _label("key", QT_TR_NOOP("PgDn")),
     PageUp:       _label("key", QT_TR_NOOP("Home")),

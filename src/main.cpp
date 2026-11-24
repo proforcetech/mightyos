@@ -45,6 +45,9 @@ int main(int argc, char *argv[])
         QStringLiteral("Development: a fake TV remote reading key names (up, select, back, ...) "
                        "from 'stdin' or 'fifo' ($XDG_RUNTIME_DIR/mightyos-fake-cec)."),
         QStringLiteral("stdin|fifo"));
+    const QCommandLineOption mockLibraryOption(QStringLiteral("mock-library"),
+        QStringLiteral("Development: show the bundled mock library instead of scanning ROMs and Steam; "
+                       "games launch the bundled test app."));
 #endif
     parser.addOption(windowedOption);
     parser.addOption(fullscreenOption);
@@ -52,8 +55,17 @@ int main(int argc, char *argv[])
     parser.addOption(noCecOption);
 #ifdef MIGHTYOS_DEV_TOOLS
     parser.addOption(fakeCecOption);
+    parser.addOption(mockLibraryOption);
 #endif
     parser.process(app);
+
+    // The Library singleton reads this when QML first uses it.
+#ifdef MIGHTYOS_DEV_TOOLS
+    if (parser.isSet(mockLibraryOption))
+        qputenv("MIGHTYOS_MOCK_LIBRARY", "1");
+#else
+    qunsetenv("MIGHTYOS_MOCK_LIBRARY");   // packaged builds always show the real library
+#endif
 
     std::unique_ptr<CecBackend> cecBackend;
 #ifdef MIGHTYOS_DEV_TOOLS

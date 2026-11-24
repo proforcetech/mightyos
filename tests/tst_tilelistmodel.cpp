@@ -3,6 +3,7 @@
 
 #include <QAbstractItemModelTester>
 #include <QSignalSpy>
+#include <QElapsedTimer>
 #include <QTest>
 #include <algorithm>
 
@@ -25,6 +26,12 @@ private slots:
     void libraryKeepsMockIdsAndStructure();
     void libraryResolve();
     void libraryRejectsBadFiles();
+    void diffSetItemsKeepsRows();
+    void diffFallsBackToReset();
+    void batchInsertRemove();
+    void letterGroups();
+    void largeDiffIsFast();
+    void scatteredDiffResets();
 
 private:
     static TileItem item(const QString &key, const QString &title, const QString &sortTitle = QString())
@@ -204,7 +211,7 @@ void TestTileListModel::qmlRows()
 
 void TestTileListModel::libraryKeepsMockIdsAndStructure()
 {
-    Library library;
+    Library library(nullptr);
     TileListModel *emulators = library.systems(QStringLiteral("emulators"));
     TileListModel *games = library.systems(QStringLiteral("games"));
     QCOMPARE(emulators->count(), 9);
@@ -232,7 +239,7 @@ void TestTileListModel::libraryKeepsMockIdsAndStructure()
 
 void TestTileListModel::libraryResolve()
 {
-    Library library;
+    Library library(nullptr);
     const auto game = library.resolve(QStringLiteral("rom:snes:5d6eb12d"));
     QVERIFY(game);
     QCOMPARE(game->kind, QStringLiteral("game"));
@@ -246,9 +253,159 @@ void TestTileListModel::libraryResolve()
 
 void TestTileListModel::libraryRejectsBadFiles()
 {
-    Library library;
+    Library library(nullptr);
     QVERIFY(!library.loadFile(QStringLiteral("/nonexistent/library.json")));
     QCOMPARE(library.systems(QStringLiteral("emulators"))->count(), 9);   // old content kept
+}
+
+// M4: setItems() is a diff when the keys only gained or lost rows.
+void TestTileListModel::diffSetItemsKeepsRows()
+{
+    TileListModel model;
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::QtTest);
+    QList<TileItem> items;
+    for (int i = 0; i < 10; ++i)
+        items.append(item(QStringLiteral("k%1").arg(i), QStringLiteral("T%1").arg(i)));
+    model.setItems(items);
+    QCOMPARE(model.resetCount(), 1);
+
+    QSignalSpy inserted(&model, &QAbstractItemModel::rowsInserted);
+    QSignalSpy removed(&model, &QAbstractItemModel::rowsRemoved);
+    QSignalSpy changed(&model, &QAbstractItemModel::dataChanged);
+    QSignalSpy count(&model, &TileListModel::countChanged);
+    QList<TileItem> next = items;
+    next.removeAt(7);
+    next.removeAt(2);
+    next.insert(0, item(QStringLiteral("new0"), QStringLiteral("A")));
+    next.insert(5, item(QStringLiteral("new5a"), QStringLiteral("B")));
+    next.insert(6, item(QStringLiteral("new5b"), QStringLiteral("C")));
+    next.append(item(QStringLiteral("last"), QStringLiteral("Z")));
+    next[3].subtitle = QStringLiteral("changed");
+    model.setItems(next);
+    QCOMPARE(model.resetCount(), 1);            // no reset
+    QCOMPARE(model.items(), next);
+    QCOMPARE(removed.count(), 2);               // two runs of one
+    QCOMPARE(inserted.count(), 3);              // [new0], [new5a, new5b], [last]
+    QCOMPARE(changed.count(), 1);
+    QCOMPARE(count.count(), 1);                 // once, at the end
+    for (int i = 0; i < next.size(); ++i)
+        QCOMPARE(model.indexOfKey(next.at(i).key), i);
+    QCOMPARE(model.indexOfKey(QStringLiteral("k2")), -1);
+    QCOMPARE(model.firstIndexForLetter(QStringLiteral("Z")), next.size() - 1);
+}
+
+void TestTileListModel::diffFallsBackToReset()
+{
+    TileListModel model;
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::QtTest);
+    model.setItems({ item(QStringLiteral("a"), QStringLiteral("A")), item(QStringLiteral("b"), QStringLiteral("B")),
+                     item(QStringLiteral("c"), QStringLiteral("C")) });
+    const int base = model.resetCount();
+    // Survivors reordered: reset.
+    model.setItems({ item(QStringLiteral("c"), QStringLiteral("C")), item(QStringLiteral("a"), QStringLiteral("A")) });
+    QCOMPARE(model.resetCount(), base + 1);
+    // Duplicate keys in the new list: reset, first row wins.
+    model.setItems({ item(QStringLiteral("c"), QStringLiteral("C")), item(QStringLiteral("x"), QStringLiteral("1")),
+                     item(QStringLiteral("x"), QStringLiteral("2")) });
+    QCOMPARE(model.resetCount(), base + 2);
+    QCOMPARE(model.indexOfKey(QStringLiteral("x")), 1);
+    // Back to unique keys: a diff again, hash correct.
+    model.setItems({ item(QStringLiteral("c"), QStringLiteral("C")), item(QStringLiteral("x"), QStringLiteral("1")),
+                     item(QStringLiteral("y"), QStringLiteral("Y")) });
+    QCOMPARE(model.indexOfKey(QStringLiteral("y")), 2);
+    QCOMPARE(model.indexOfKey(QStringLiteral("x")), 1);
+}
+
+void TestTileListModel::batchInsertRemove()
+{
+    TileListModel model;
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::QtTest);
+    QSignalSpy inserted(&model, &QAbstractItemModel::rowsInserted);
+    QSignalSpy removed(&model, &QAbstractItemModel::rowsRemoved);
+    model.insertItems(0, { item(QStringLiteral("a"), QStringLiteral("A")), item(QStringLiteral("d"), QStringLiteral("D")) });
+    model.insertItems(1, { item(QStringLiteral("b"), QStringLiteral("B")), item(QStringLiteral("c"), QStringLiteral("C")) });
+    QCOMPARE(inserted.count(), 2);
+    QCOMPARE(model.keyAt(2), QStringLiteral("c"));
+    QCOMPARE(model.indexOfKey(QStringLiteral("d")), 3);
+    QCOMPARE(model.letterAt(3), QStringLiteral("D"));
+    QVERIFY(model.removeItems(1, 2));
+    QCOMPARE(removed.count(), 1);
+    QCOMPARE(model.count(), 2);
+    QCOMPARE(model.indexOfKey(QStringLiteral("d")), 1);
+    QCOMPARE(model.indexOfKey(QStringLiteral("b")), -1);
+    QVERIFY(!model.removeItems(1, 5));
+    QVERIFY(!model.removeItems(-1, 1));
+}
+
+void TestTileListModel::letterGroups()
+{
+    TileListModel model;
+    model.setItems({ item(QStringLiteral("1"), QStringLiteral("1942")), item(QStringLiteral("2"), QStringLiteral("Alpha")),
+                     item(QStringLiteral("3"), QStringLiteral("Axe")), item(QStringLiteral("4"), QStringLiteral("Bomb")),
+                     item(QStringLiteral("5"), QStringLiteral("Échec")), item(QStringLiteral("6"), QStringLiteral("Echo")) });
+    QCOMPARE(model.letterAt(0), QStringLiteral("#"));
+    QCOMPARE(model.letterAt(4), QStringLiteral("E"));   // accents folded
+    QCOMPARE(model.letterAt(9), QString());
+    QCOMPARE(model.letterStep(0, 1), 1);
+    QCOMPARE(model.letterStep(1, 1), 3);
+    QCOMPARE(model.letterStep(2, 1), 3);
+    QCOMPARE(model.letterStep(4, 1), -1);   // E is the last group
+    QCOMPARE(model.letterStep(2, -1), 1);   // start of the current group first
+    QCOMPARE(model.letterStep(1, -1), 0);   // then the previous group
+    QCOMPARE(model.letterStep(5, -1), 4);
+    QCOMPARE(model.letterStep(0, -1), -1);
+}
+
+void TestTileListModel::largeDiffIsFast()
+{
+    TileListModel model;
+    QList<TileItem> items;
+    for (int i = 0; i < 20000; ++i)
+        items.append(item(QStringLiteral("rom:x:%1").arg(i, 6, 10, QLatin1Char('0')),
+                          QStringLiteral("Game %1").arg(i, 6, 10, QLatin1Char('0'))));
+    model.setItems(items);
+    QList<TileItem> next = items;
+    next.removeAt(100);
+    next.insert(5000, item(QStringLiteral("rom:x:new"), QStringLiteral("Game 005000a")));
+    QElapsedTimer timer;
+    timer.start();
+    model.setItems(next);
+    QCOMPARE(model.resetCount(), 1);
+    QCOMPARE(model.items(), next);
+    QVERIFY2(timer.elapsed() < 500, qPrintable(QString::number(timer.elapsed())));
+}
+
+// H3 (M4 review): 10k scattered edits on 20k rows took 2.3 s as a diff.
+// Above kMaxDiffRuns runs it is one reset.
+void TestTileListModel::scatteredDiffResets()
+{
+    TileListModel model;
+    QList<TileItem> items;
+    for (int i = 0; i < 20000; ++i)
+        items.append(item(QStringLiteral("k%1").arg(i, 6, 10, QLatin1Char('0')), QStringLiteral("T%1").arg(i)));
+    model.setItems(items);
+    const int base = model.resetCount();
+    QList<TileItem> scattered;
+    for (int i = 0; i < items.size(); ++i) {
+        if (i % 2 == 0)
+            scattered.append(items.at(i));   // every other row removed: 10k runs
+    }
+    QElapsedTimer timer;
+    timer.start();
+    model.setItems(scattered);
+    QVERIFY2(timer.elapsed() < 300, qPrintable(QString::number(timer.elapsed())));
+    QCOMPARE(model.resetCount(), base + 1);
+    QCOMPARE(model.items(), scattered);
+    QCOMPARE(model.indexOfKey(scattered.last().key), scattered.size() - 1);
+    // A handful of runs is still a diff, and the hash is right afterwards.
+    QList<TileItem> few = scattered;
+    for (int i = 0; i < TileListModel::kMaxDiffRuns / 2; ++i)
+        few.removeAt(i * 300);
+    model.setItems(few);
+    QCOMPARE(model.resetCount(), base + 1);
+    for (int i = 0; i < few.size(); i += 997)
+        QCOMPARE(model.indexOfKey(few.at(i).key), i);
+    QCOMPARE(model.indexOfKey(scattered.at(0).key), -1);
 }
 
 QTEST_GUILESS_MAIN(TestTileListModel)

@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "id": "gba",
+  "label": "GBA",
+  "fullName": "Nintendo Game Boy Advance",
+  "category": "emulators",
+  "order": 42,
+  "icon": "handheld",
+  "tint": "#6a5acd",
+  "extensions": [
+    "gba",
+    "zip",
+    "7z"
+  ],
+  "romDirs": [
+    "~/ROMs/gba"
+  ],
+  "emulators": [
+    {
+      "id": "mgba",
+      "label": "mGBA (RetroArch)",
+      "type": "retroarch",
+      "core": "mgba"
+    },
+    {
+      "id": "mgba-standalone",
+      "label": "mGBA",
+      "type": "flatpak",
+      "app": "io.mgba.mGBA",
+      "args": [
+        "-f",
+        "{rom}"
+      ]
+    }
+  ],
+  "defaultEmulator": "mgba"
+}

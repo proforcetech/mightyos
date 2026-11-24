@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "id": "psp",
+  "label": "PSP",
+  "fullName": "Sony PlayStation Portable",
+  "category": "emulators",
+  "order": 92,
+  "icon": "handheld",
+  "tint": "#8fa3bf",
+  "extensions": [
+    "iso",
+    "cso",
+    "pbp",
+    "chd"
+  ],
+  "romDirs": [
+    "~/ROMs/psp"
+  ],
+  "emulators": [
+    {
+      "id": "ppsspp",
+      "label": "PPSSPP",
+      "type": "flatpak",
+      "app": "org.ppsspp.PPSSPP",
+      "args": [
+        "--fullscreen",
+        "{rom}"
+      ]
+    },
+    {
+      "id": "ppsspp-retroarch",
+      "label": "PPSSPP (RetroArch)",
+      "type": "retroarch",
+      "core": "ppsspp"
+    }
+  ],
+  "defaultEmulator": "ppsspp"
+}

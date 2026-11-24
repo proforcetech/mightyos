@@ -42,6 +42,26 @@ Item {
             focusSpy.clear()
         }
 
+        // H1 (M4 review): a saved game position whose source hasn't loaded
+        // yet stays pending (and is what gets saved) until sourceReady.
+        function test_pendingKeyWaitsForSource() {
+            grid.keepPendingKey = true
+            grid.sourceReady = false
+            grid.restoreFocus(5, "late")
+            compare(grid.savedKey(), "late")
+            compare(grid.savedIndex(), 5)
+            compare(grid.currentIndex, 5)              // shows the clamped fallback meanwhile
+            gridModel.appendRow({ key: "late", title: "Z late", sortTitle: "Z late" })
+            compare(grid.currentIndex, 38)             // the key arrived: focus lands on it
+            compare(grid.savedKey(), "late")
+            grid.restoreFocus(2, "never")
+            compare(grid.savedKey(), "never")
+            grid.sourceReady = true                    // the scan is done: really gone
+            compare(grid.savedKey(), grid.keyAt(2))
+            grid.keepPendingKey = false
+            grid.sourceReady = Qt.binding(() => AppRegistry.ready)
+        }
+
         function test_geometry() {
             compare(grid.columns, 4)
             compare(grid.visibleRows, 2)

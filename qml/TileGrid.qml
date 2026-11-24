@@ -226,23 +226,28 @@ GridView {
 
     property string _resetKey
     property int _resetIndex: 0
-    // App-backed rows (Media, All apps, Recent): a saved key that isn't in
-    // the model before AppRegistry's first scan stays pending instead of
-    // being clamped away. Static rows keep the plain clamp.
+    // Rows whose source loads asynchronously (apps before AppRegistry's
+    // first scan, games before the Library's first scan): a saved key that
+    // isn't in the model yet stays pending instead of being clamped away,
+    // until `sourceReady`. Static rows keep the plain clamp.
     property bool keepPendingKey: false
+    property bool sourceReady: AppRegistry.ready
     property string _pendingKey
     property int _pendingIndex: 0
-    Connections {
-        target: AppRegistry
-        function onReadyChanged() {
-            // After a real scan a missing key is really gone.
-            grid._takePending()
-            grid._pendingKey = ""
-        }
+    onSourceReadyChanged: {
+        if (!sourceReady)
+            return
+        // After the real scan a missing key is really gone.
+        _takePending()
+        _pendingKey = ""
     }
     Connections {
         target: grid.model
         ignoreUnknownSignals: true
+        function onCountChanged() {
+            // The model's own signal: the view's count follows later.
+            grid._takePending()
+        }
         function onItemsAboutToReset() {
             grid._resetKey = grid.savedKey()
             grid._resetIndex = grid.savedIndex()
@@ -268,7 +273,7 @@ GridView {
     function restoreFocus(index: int, key: string) {
         _pendingKey = ""
         let target = indexOfKey(key)
-        if (target < 0 && key.length > 0 && keepPendingKey && !AppRegistry.ready) {
+        if (target < 0 && key.length > 0 && keepPendingKey && !sourceReady) {
             // Not there (yet): apps arrive with the first scan, Recent after
             // a re-scan. Remember it until it shows up or the user moves,
             // and save it unchanged meanwhile (savedKey/savedIndex).
@@ -305,15 +310,22 @@ GridView {
         }
     }
 
-    // Letter-jump hook (A-Z overlay / LT-RT letter mode arrive with the real
-    // library in M4). Focuses the first item whose sort title starts with
-    // `letter` or, if none does, the first one after it. Assumes the model
-    // is sorted. Returns true if focus moved.
+    // Letter jump (GameGrid: typed letters). Focuses the first item whose
+    // sort title starts with `letter` or, if none does, the first one after
+    // it. Assumes the model is sorted. Returns true if focus moved.
     function jumpToLetter(letter: string): bool {
         const i = model ? model.firstIndexForLetter(letter) : -1
         if (i < 0 || i === currentIndex)
             return false
         _setIndex(i)
+        return true
+    }
+
+    // Focus `index` (LT/RT letter steps); false if out of range.
+    function jumpTo(index: int): bool {
+        if (index < 0 || index >= count)
+            return false
+        _setIndex(index)
         return true
     }
 

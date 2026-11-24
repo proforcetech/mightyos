@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "id": "wii",
+  "label": "Wii",
+  "fullName": "Nintendo Wii",
+  "category": "emulators",
+  "order": 61,
+  "icon": "disc",
+  "tint": "#5ac8fa",
+  "extensions": [
+    "iso",
+    "wbfs",
+    "rvz",
+    "gcz",
+    "wia",
+    "ciso",
+    "wad"
+  ],
+  "romDirs": [
+    "~/ROMs/wii"
+  ],
+  "emulators": [
+    {
+      "id": "dolphin",
+      "label": "Dolphin",
+      "type": "flatpak",
+      "app": "org.DolphinEmu.dolphin-emu",
+      "args": [
+        "-u",
+        "{appdata}",
+        "-b",
+        "-e",
+        "{rom}"
+      ]
+    }
+  ],
+  "defaultEmulator": "dolphin"
+}

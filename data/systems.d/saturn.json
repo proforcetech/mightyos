@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "saturn",
+  "label": "Saturn",
+  "fullName": "Sega Saturn",
+  "category": "emulators",
+  "order": 72,
+  "icon": "disc",
+  "tint": "#6c7a96",
+  "extensions": [
+    "cue",
+    "chd",
+    "ccd",
+    "m3u",
+    "iso",
+    "mds"
+  ],
+  "romDirs": [
+    "~/ROMs/saturn"
+  ],
+  "emulators": [
+    {
+      "id": "beetlesaturn",
+      "label": "Beetle Saturn (RetroArch)",
+      "type": "retroarch",
+      "core": "mednafen_saturn"
+    },
+    {
+      "id": "yabasanshiro",
+      "label": "YabaSanshiro (RetroArch)",
+      "type": "retroarch",
+      "core": "yabasanshiro"
+    }
+  ],
+  "defaultEmulator": "beetlesaturn"
+}

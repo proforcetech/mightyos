@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "id": "steam",
+  "label": "Steam",
+  "fullName": "Installed Steam games",
+  "category": "games",
+  "kind": "steam",
+  "order": 10,
+  "icon": "steam",
+  "tint": "#66c0f4"
+}

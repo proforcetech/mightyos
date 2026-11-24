@@ -31,7 +31,10 @@ if(CMAKE_GENERATOR MATCHES "Ninja")
     set(CMAKE_JOB_POOL_COMPILE mightyos_compile)
 endif()
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Qml Quick Concurrent)
+# Sql: the ROM library cache (Ubuntu: libqt6sql6-sqlite provides the
+# QSQLITE driver at run time). Network: SteamGridDB artwork.
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Qml Quick Concurrent Sql Network)
+include(GNUInstallDirs)
 # Development entry points that feed input from outside the session
 # (--fake-cec for mightyos and mightyos-inputtest). ON while MightyOS is in
 # development; packaged builds (M6) must set it OFF.
@@ -39,6 +42,21 @@ option(MIGHTYOS_DEV_TOOLS "Build development-only input options (--fake-cec)" ON
 
 # Gamepads (PLAN D6). Ubuntu: libsdl3-dev.
 find_package(SDL3 3.2 REQUIRED CONFIG COMPONENTS SDL3-shared)
+
+# Optional: the SteamGridDB API key in the Secret Service (PLAN D11).
+# Ubuntu: libsecret-1-dev. Without it the key is a 0600 file.
+option(MIGHTYOS_WITH_LIBSECRET "Store API keys with libsecret when available" ON)
+if(MIGHTYOS_WITH_LIBSECRET)
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(LIBSECRET QUIET IMPORTED_TARGET libsecret-1)
+    endif()
+endif()
+if(LIBSECRET_FOUND)
+    message(STATUS "libsecret ${LIBSECRET_VERSION}: API keys go to the Secret Service")
+else()
+    message(STATUS "libsecret not found: API keys are stored in a 0600 file")
+endif()
 qt_standard_project_setup(REQUIRES 6.8)
 # Each QML module gets <dir>/MightyOS/<Name>, which qmllint and qmlcachegen
 # use as their import path.
@@ -96,15 +114,38 @@ qt_add_qml_module(mightyos_core
         src/gamepadservice.h src/gamepadservice.cpp
         src/cecinput.h src/cecinput.cpp
         src/cecservice.h src/cecservice.cpp
+        src/keyvalues.h src/keyvalues.cpp
+        src/systemregistry.h src/systemregistry.cpp
+        src/romscanner.h src/romscanner.cpp
+        src/librarycache.h src/librarycache.cpp
+        src/steamlibrary.h src/steamlibrary.cpp
+        src/steamtracker.h src/steamtracker.cpp
+        src/emulatorlaunch.h src/emulatorlaunch.cpp
+        src/apikeystore.h src/apikeystore.cpp
+        src/steamgriddb.h src/steamgriddb.cpp
+        src/artworkscraper.h src/artworkscraper.cpp
 )
-# Mock library (systems + games) until the real library arrives in M4.
+# Mock library (systems + games) for tests and `--mock-library` dev runs.
 qt_add_resources(mightyos_core "mightyos_mockdata"
     PREFIX /mightyos/mock
     BASE data/mock
     FILES data/mock/library.json)
+# Built-in system definitions (the lowest systems.d layer); the same files
+# are installed to share/mightyos/systems.d.
+file(GLOB MIGHTYOS_SYSTEM_DEFS CONFIGURE_DEPENDS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
+     "${CMAKE_CURRENT_SOURCE_DIR}/data/systems.d/*.json")
+qt_add_resources(mightyos_core "mightyos_systems"
+    PREFIX /mightyos
+    BASE data
+    FILES ${MIGHTYOS_SYSTEM_DEFS})
 target_include_directories(mightyos_core PUBLIC src)
-target_link_libraries(mightyos_core PUBLIC Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Concurrent)
+target_link_libraries(mightyos_core PUBLIC Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Concurrent
+                                           Qt6::Sql Qt6::Network)
 target_link_libraries(mightyos_core PRIVATE SDL3::SDL3)
+if(LIBSECRET_FOUND)
+    target_link_libraries(mightyos_core PRIVATE PkgConfig::LIBSECRET)
+    target_compile_definitions(mightyos_core PRIVATE MIGHTYOS_HAVE_LIBSECRET)
+endif()
 mightyos_set_warnings(mightyos_core)
 
 # ---------------------------------------------------------------------------
@@ -149,6 +190,7 @@ qt_add_qml_module(mightyos_ui
         qml/screens/GameGridScreen.qml
         qml/screens/CategoryScreen.qml
         qml/screens/AppListScreen.qml
+        qml/screens/ArtworkScreen.qml
         qml/ProfilePicker.qml
         qml/ProfileEditor.qml
         qml/ChoiceRow.qml
@@ -202,6 +244,13 @@ target_link_libraries(mightyos-inputtest PRIVATE Qt6::Core mightyos_core)
 target_compile_definitions(mightyos-inputtest PRIVATE $<$<BOOL:${MIGHTYOS_DEV_TOOLS}>:MIGHTYOS_DEV_TOOLS>)
 mightyos_set_warnings(mightyos-inputtest)
 
+# ---------------------------------------------------------------------------
+# Install (packaging proper is M6): binaries and the default systems.d.
+# ---------------------------------------------------------------------------
+install(TARGETS mightyos RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(DIRECTORY data/systems.d DESTINATION ${CMAKE_INSTALL_DATADIR}/mightyos
+        FILES_MATCHING PATTERN "*.json")
+
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -223,7 +272,8 @@ if(MIGHTYOS_BUILD_TESTS)
         "XDG_DATA_HOME=${_test_xdg}/data"
         "XDG_CACHE_HOME=${_test_xdg}/cache"
         "XDG_DATA_DIRS=${_test_xdg}/system"
-        "XDG_CURRENT_DESKTOP=MightyOS")
+        "XDG_CURRENT_DESKTOP=MightyOS"
+        "MIGHTYOS_MOCK_LIBRARY=1")
     add_test(NAME clear_test_state COMMAND ${CMAKE_COMMAND} -E rm -rf "${_test_xdg}")
     set_tests_properties(clear_test_state PROPERTIES FIXTURES_SETUP test_state)
 
@@ -255,6 +305,12 @@ if(MIGHTYOS_BUILD_TESTS)
     mightyos_add_test(tst_gamepadservice LIBS SDL3::SDL3)
     mightyos_add_test(tst_cec)
     mightyos_add_test(tst_settings)
+    mightyos_add_test(tst_keyvalues)
+    mightyos_add_test(tst_systems)
+    mightyos_add_test(tst_romscanner)
+    mightyos_add_test(tst_steam)
+    mightyos_add_test(tst_library)
+    mightyos_add_test(tst_scraper LIBS Qt6::Gui)
 
     # Qt Quick Test: components, NavStack and the whole Main window
     # (tests/qml/tst_*.qml). tst_main launches the test app.

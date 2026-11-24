@@ -18,6 +18,7 @@ NavScreen {
 
     title: _category ? _category.title : ""
     valid: _category !== null && _milestone[params.category] !== undefined
+           && !(Library.restricted && params.category !== "media")   // kids: no store / settings
 
     prompts: {
         const list = [

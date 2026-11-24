@@ -47,7 +47,7 @@ NavScreen {
     readonly property string _infoText: {
         if (_category) {
             if (_category.key === "favorites" && Favorites.count === 0)
-                return qsTr("Press X (F) on any game, app or system to pin it here")
+                return qsTr("Press X (Insert) on any game, app or system to pin it here")
             if (_category.key === "media" && AppRegistry.media.count === 0)
                 return qsTr("No media apps installed yet")
             return _category.blurb
@@ -252,11 +252,18 @@ NavScreen {
     }
 
     Component.onCompleted: {
-        categoryModel.setRows(Catalog.categoryRows())
+        categoryModel.setRows(Catalog.categoryRows(Library.restricted))
         storeModel.setRows(Catalog.sectionRows("store"))
         settingsModel.setRows(Catalog.sectionRows("settings"))
         bar.currentIndex = 0
         _showCategory()
+    }
+
+    Connections {
+        target: Library
+        function onRestrictedChanged() {
+            categoryModel.setRows(Catalog.categoryRows(Library.restricted))
+        }
     }
 
     // The Favorites row or Recent row can empty out under the focus
@@ -280,6 +287,7 @@ NavScreen {
 
             CategoryBar {
                 id: bar
+                objectName: "categoryBar"
                 anchors.verticalCenter: parent.verticalCenter
                 model: categoryModel
                 active: home.focusShown && home.focusRow === 0
@@ -309,7 +317,10 @@ NavScreen {
             TileRow {
                 id: content
                 objectName: "homeContent"
-                keepPendingKey: home._shownCategory === "media"
+                keepPendingKey: home._shownCategory !== "store" && home._shownCategory !== "settings"
+                sourceReady: home._shownCategory === "media" ? AppRegistry.ready
+                           : home._shownCategory === "favorites" ? AppRegistry.ready && Library.scanned
+                           : Library.scanned
                 anchors.verticalCenter: parent.verticalCenter
                 active: home.focusShown && home.focusRow === 1
                 onCurrentIndexChanged: {
@@ -350,6 +361,7 @@ NavScreen {
                 id: recent
                 objectName: "homeRecent"
                 keepPendingKey: true
+                sourceReady: AppRegistry.ready && Library.scanned
                 anchors.verticalCenter: parent.verticalCenter
                 model: History.recent
                 tileWidth: Theme.recentTileSize

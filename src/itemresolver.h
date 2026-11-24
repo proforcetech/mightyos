@@ -30,7 +30,7 @@ signals:
     void changed();
 };
 
-// The real resolver: mock Library (games, systems) + AppRegistry (apps).
+// The real resolver: Library (games, systems; mock or scanned) + AppRegistry (apps).
 class CatalogResolver : public ItemResolver
 {
     Q_OBJECT

@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "id": "nes",
+  "label": "NES",
+  "fullName": "Nintendo Entertainment System",
+  "category": "emulators",
+  "order": 10,
+  "icon": "cartridge",
+  "tint": "#e05a5a",
+  "extensions": [
+    "nes",
+    "fds",
+    "unf",
+    "unif",
+    "zip",
+    "7z"
+  ],
+  "romDirs": [
+    "~/ROMs/nes"
+  ],
+  "emulators": [
+    {
+      "id": "mesen",
+      "label": "Mesen (RetroArch)",
+      "type": "retroarch",
+      "core": "mesen"
+    },
+    {
+      "id": "nestopia",
+      "label": "Nestopia (RetroArch)",
+      "type": "retroarch",
+      "core": "nestopia"
+    },
+    {
+      "id": "fceumm",
+      "label": "FCEUmm (RetroArch)",
+      "type": "retroarch",
+      "core": "fceumm"
+    }
+  ],
+  "defaultEmulator": "mesen"
+}

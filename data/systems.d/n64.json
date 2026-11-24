@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "n64",
+  "label": "N64",
+  "fullName": "Nintendo 64",
+  "category": "emulators",
+  "order": 30,
+  "icon": "cartridge",
+  "tint": "#4fc06a",
+  "extensions": [
+    "n64",
+    "v64",
+    "z64",
+    "ndd",
+    "zip",
+    "7z"
+  ],
+  "romDirs": [
+    "~/ROMs/n64"
+  ],
+  "emulators": [
+    {
+      "id": "mupen64plus",
+      "label": "Mupen64Plus-Next (RetroArch)",
+      "type": "retroarch",
+      "core": "mupen64plus_next"
+    },
+    {
+      "id": "parallel",
+      "label": "ParaLLEl N64 (RetroArch)",
+      "type": "retroarch",
+      "core": "parallel_n64"
+    }
+  ],
+  "defaultEmulator": "mupen64plus"
+}

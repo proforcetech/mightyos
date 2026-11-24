@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "id": "ps1",
+  "label": "PS1",
+  "fullName": "Sony PlayStation",
+  "category": "emulators",
+  "order": 90,
+  "icon": "disc",
+  "tint": "#b0b8c8",
+  "extensions": [
+    "cue",
+    "chd",
+    "m3u",
+    "pbp",
+    "iso",
+    "ccd"
+  ],
+  "romDirs": [
+    "~/ROMs/ps1"
+  ],
+  "emulators": [
+    {
+      "id": "beetlepsx",
+      "label": "Beetle PSX HW (RetroArch)",
+      "type": "retroarch",
+      "core": "mednafen_psx_hw"
+    },
+    {
+      "id": "swanstation",
+      "label": "SwanStation (RetroArch)",
+      "type": "retroarch",
+      "core": "swanstation"
+    },
+    {
+      "id": "pcsxrearmed",
+      "label": "PCSX ReARMed (RetroArch)",
+      "type": "retroarch",
+      "core": "pcsx_rearmed"
+    },
+    {
+      "id": "duckstation",
+      "label": "DuckStation",
+      "type": "flatpak",
+      "app": "org.duckstation.DuckStation",
+      "args": [
+        "-batch",
+        "-fullscreen",
+        "--",
+        "{rom}"
+      ]
+    }
+  ],
+  "defaultEmulator": "beetlepsx"
+}

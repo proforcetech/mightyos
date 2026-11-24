@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "id": "arcade",
+  "label": "Arcade",
+  "fullName": "Arcade (MAME / FinalBurn Neo)",
+  "category": "emulators",
+  "order": 80,
+  "icon": "arcade",
+  "tint": "#ffb347",
+  "extensions": [
+    "zip",
+    "7z"
+  ],
+  "romDirs": [
+    "~/ROMs/arcade"
+  ],
+  "emulators": [
+    {
+      "id": "fbneo",
+      "label": "FinalBurn Neo (RetroArch)",
+      "type": "retroarch",
+      "core": "fbneo"
+    },
+    {
+      "id": "mame",
+      "label": "MAME (RetroArch)",
+      "type": "retroarch",
+      "core": "mame"
+    }
+  ],
+  "defaultEmulator": "fbneo"
+}

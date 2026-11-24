@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "id": "snes",
+  "label": "SNES",
+  "fullName": "Super Nintendo",
+  "category": "emulators",
+  "order": 20,
+  "icon": "cartridge",
+  "tint": "#9b8cff",
+  "extensions": [
+    "sfc",
+    "smc",
+    "fig",
+    "swc",
+    "bs",
+    "zip",
+    "7z"
+  ],
+  "romDirs": [
+    "~/ROMs/snes"
+  ],
+  "emulators": [
+    {
+      "id": "snes9x",
+      "label": "Snes9x (RetroArch)",
+      "type": "retroarch",
+      "core": "snes9x"
+    },
+    {
+      "id": "bsnes",
+      "label": "bsnes (RetroArch)",
+      "type": "retroarch",
+      "core": "bsnes"
+    }
+  ],
+  "defaultEmulator": "snes9x"
+}

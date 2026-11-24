@@ -132,7 +132,7 @@ Item {
             verify(picker.startup)
             compare(stack.depth, 0)                           // nothing behind the picker yet
             compare(profileRow().currentEntry().key, baseId)  // preselected
-            compare(profileRow().model.get(1).badge, "Kids")  // shown, not enforced
+            compare(profileRow().model.get(1).badge, "Kids")
             act(InputRouter.Back)                             // at startup: must choose
             verify(picker.open)
             act(InputRouter.Navigate, "right")
@@ -142,11 +142,21 @@ Item {
             compare(stack.profileId, other)
             compare(stack.depth, 1)
 
-            // Next start preselects the profile used last.
+            // Next start: the kids profile was used last, so it starts
+            // directly (S2: the picker would let anyone leave it without
+            // the PIN), and the picker can't be opened from it.
+            destroyMain()
+            makeMain()
+            verify(!picker.open)
+            compare(stack.profileId, other)
+            win.openProfilePicker()
+            verify(!picker.open)
+            // A standard profile used last: the picker preselects it.
+            ProfileService.select(baseId)
             destroyMain()
             makeMain()
             verify(picker.open)
-            compare(profileRow().currentEntry().key, other)
+            compare(profileRow().currentEntry().key, baseId)
         }
 
         function test_switchResetsStackAndRestoresPath() {

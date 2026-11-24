@@ -92,21 +92,32 @@ Item {
         }
         const id = item.key
         const name = item.title
+        // With saved games there is a choice; keeping them is the first
+        // (and Back still cancels the whole thing).
+        const saves = ProfileService.hasSaves(id)
+        const buttons = saves
+            ? [{ id: "cancel", label: qsTr("Cancel") },
+               { id: "delete", label: qsTr("Delete, keep saves"), destructive: true },
+               { id: "deleteAll", label: qsTr("Delete with saves"), destructive: true }]
+            : [{ id: "keep", label: qsTr("Keep") },
+               { id: "delete", label: qsTr("Delete"), destructive: true }]
         dialogRequested({
             acceptsRemote: false,
             title: qsTr("Delete %1?").arg(name),
-            message: qsTr("Its favorites, history and saved position are deleted too. This can't be undone."),
-            buttons: [
-                { id: "keep", label: qsTr("Keep") },
-                { id: "delete", label: qsTr("Delete"), destructive: true }
-            ],
+            message: saves
+                ? qsTr("Its favorites, history and saved position are deleted. Its game saves stay in %1 "
+                       + "unless you choose Delete with saves. This can't be undone.").arg(ProfileService.savesLocation(id))
+                : qsTr("Its favorites, history and saved position are deleted too. This can't be undone."),
+            buttons: buttons,
             onFinished: (answer) => {
-                if (answer !== "delete")
+                if (answer !== "delete" && answer !== "deleteAll")
                     return
                 picker.removing(id)
-                if (ProfileService.remove(id)) {
+                if (ProfileService.remove(id, answer !== "deleteAll")) {
                     row.restoreFocus(0, ProfileService.activeId)   // land on a profile, not "Add"
-                    picker.toastRequested(qsTr("Deleted %1").arg(name), false)
+                    picker.toastRequested(saves && answer === "delete"
+                                          ? qsTr("Deleted %1, kept the saves").arg(name)
+                                          : qsTr("Deleted %1").arg(name), false)
                 }
                 else
                     picker.toastRequested(qsTr("Could not delete %1").arg(name), true)

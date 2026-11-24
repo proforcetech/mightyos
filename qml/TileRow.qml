@@ -204,23 +204,28 @@ ListView {
     // the same, clamped, index if that item is gone).
     property string _resetKey
     property int _resetIndex: 0
-    // App-backed rows (Media, All apps, Recent): a saved key that isn't in
-    // the model before AppRegistry's first scan stays pending instead of
-    // being clamped away. Static rows keep the plain clamp.
+    // Rows whose source loads asynchronously (apps before AppRegistry's
+    // first scan, games before the Library's first scan): a saved key that
+    // isn't in the model yet stays pending instead of being clamped away,
+    // until `sourceReady`. Static rows keep the plain clamp.
     property bool keepPendingKey: false
+    property bool sourceReady: AppRegistry.ready
     property string _pendingKey
     property int _pendingIndex: 0
-    Connections {
-        target: AppRegistry
-        function onReadyChanged() {
-            // After a real scan a missing key is really gone.
-            row._takePending()
-            row._pendingKey = ""
-        }
+    onSourceReadyChanged: {
+        if (!sourceReady)
+            return
+        // After the real scan a missing key is really gone.
+        _takePending()
+        _pendingKey = ""
     }
     Connections {
         target: row.model
         ignoreUnknownSignals: true
+        function onCountChanged() {
+            // The model's own signal: the view's count follows later.
+            row._takePending()
+        }
         function onItemsAboutToReset() {
             row._resetKey = row.savedKey()
             row._resetIndex = row.savedIndex()
@@ -248,7 +253,7 @@ ListView {
     function restoreFocus(index: int, key: string) {
         _pendingKey = ""
         let target = indexOfKey(key)
-        if (target < 0 && key.length > 0 && keepPendingKey && !AppRegistry.ready) {
+        if (target < 0 && key.length > 0 && keepPendingKey && !sourceReady) {
             // Not there (yet): apps arrive with the first scan, Recent after
             // a re-scan. Remember it until it shows up or the user moves,
             // and save it unchanged meanwhile (savedKey/savedIndex).

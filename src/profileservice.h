@@ -11,7 +11,11 @@
 
 // User profiles (PLAN D13). Decides which profile is active; per-profile
 // data lives in .../mightyos/profiles/<id>/ under the config and state dirs
-// (favorites.json in config, history.json and navstate.json in state).
+// (favorites.json, emulators.json, allowed.json in config; history.json,
+// navstate.json and generated emulator configs in state) and game saves
+// under the data dir (profiles/<id>/saves/<system>; the Flatpak RetroArch
+// keeps its per-profile saves inside its own sandbox dir,
+// ~/.var/app/org.libretro.RetroArch/data/mightyos/profiles/<id>).
 //
 // File: $XDG_CONFIG_HOME/mightyos/profiles.json
 //   { "version": 1, "profiles": [ { "id", "name", "avatar", "color",
@@ -62,6 +66,10 @@ public:
     // $XDG_CONFIG_HOME/mightyos and $XDG_STATE_HOME/mightyos.
     explicit ProfileService(QObject *parent = nullptr);
     ProfileService(const QString &configDir, const QString &stateDir, QObject *parent = nullptr);
+    // `dataDir` ($XDG_DATA_HOME/mightyos) and `home` locate the saves; empty
+    // means "no saves to manage".
+    ProfileService(const QString &configDir, const QString &stateDir, const QString &dataDir,
+                   const QString &home, QObject *parent = nullptr);
 
     QString activeId() const { return m_activeId; }
     QVariantMap active() const { return profile(m_activeId); }
@@ -82,12 +90,17 @@ public:
     // either everything is applied or nothing is.
     Q_INVOKABLE bool update(const QString &id, const QString &name, const QString &avatar,
                             const QString &color, const QString &kind);
-    // Deletes the profile and its per-profile dirs. Never the last one, and
-    // nothing at all if mightyos/ or profiles/ (in the config or state dir)
-    // is a symlink: the data deletion would follow it out of our tree. If
-    // it was active, the most recently used remaining profile becomes
-    // active.
-    Q_INVOKABLE bool remove(const QString &id);
+    // Deletes the profile and its per-profile config and state dirs. Game
+    // saves are kept unless `keepSaves` is false (the UI asks; keeping is
+    // the default). Never the last profile, and nothing at all if mightyos/
+    // or profiles/ (in any of our dirs) is a symlink: the deletion would
+    // follow it out of our tree. If it was active, the most recently used
+    // remaining profile becomes active.
+    Q_INVOKABLE bool remove(const QString &id, bool keepSaves = true);
+    // True if the profile has any saved games (a non-empty saves dir).
+    Q_INVOKABLE bool hasSaves(const QString &id) const;
+    // Where its saves live (display: "~/..."), for the delete dialog.
+    Q_INVOKABLE QString savesLocation(const QString &id) const;
     // Makes `id` active and stamps lastUsed.
     Q_INVOKABLE bool select(const QString &id);
     Q_INVOKABLE QVariantMap profile(const QString &id) const;
@@ -103,6 +116,9 @@ public:
     // Empty for an invalid id.
     QString profileConfigDir(const QString &id) const;
     QString profileStateDir(const QString &id) const;
+    QString profileDataDir(const QString &id) const;
+    // Every directory that holds saves of `id` (existing or not).
+    QStringList savesDirs(const QString &id) const;
 
     static QString normalizedName(const QString &name);
     static bool isValidName(const QString &name);
@@ -126,8 +142,12 @@ private:
     QString newId() const;
     bool dataDirsAreSafe() const;
 
+    bool removeTree(const QString &dir) const;
+
     QString m_configDir;
     QString m_stateDir;
+    QString m_dataDir;
+    QString m_home;
     QList<Profile> m_profiles;
     QString m_activeId;
 };

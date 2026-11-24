@@ -54,6 +54,8 @@ CatalogResolver::CatalogResolver(Library *library, AppRegistry *registry, QObjec
 
 bool CatalogResolver::isPending(const QString &key) const
 {
+    if (m_library && m_library->isPending(key))
+        return true;   // ROMs before the cache loaded, Steam before the first scan
     return m_registry && !m_registry->isReady()
            && (key.startsWith(QLatin1String("app:")) || key.startsWith(QLatin1String("flatpak:"))
                || key.startsWith(QLatin1String("desktop:")));
@@ -166,7 +168,8 @@ TileItem Favorites::tileFor(const QString &key) const
     item.tint = QStringLiteral("#5a6274");
     if (m_resolver && m_resolver->isPending(key)) {
         // Apps not scanned yet: not "Unavailable", just not here yet.
-        item.subtitle = tr("Looking for apps…");
+        item.subtitle = key.startsWith(QLatin1String("rom:")) || key.startsWith(QLatin1String("steam:"))
+            ? tr("Looking for games…") : tr("Looking for apps…");
         item.available = true;
         return item;
     }

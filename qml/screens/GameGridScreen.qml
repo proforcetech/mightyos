@@ -3,8 +3,16 @@ import MightyOS.Core
 import MightyOS.UI
 
 // The games of one system (Library.games()) or the Favorites collection
-// (Favorites.model) as a poster grid. LT/RT (Home/End) page through it;
-// Accept launches the focused game (or opens a favorited system/app).
+// (Favorites.model) as a poster grid. Accept launches the focused game (or
+// opens a favorited system/app).
+//
+// A-Z jump (PLAN M4): LT/RT (keyboard Home/End, remote CH-/CH+) step to
+// the previous/next letter group of the sorted list (first tile of "B",
+// "C", ...; LT first goes to the start of the current group); typing a
+// letter or digit on a keyboard jumps to the first title starting with it
+// (or the next one after it). A large letter shows briefly where you
+// landed. The Favorites collection is in your order, not sorted, so there
+// LT/RT page instead.
 // LB/RB (PgUp/PgDn) step to the previous/next system of the same category
 // (SNES -> N64), replacing this grid in place: Back still returns to the
 // system list, whose focus follows. At the first/last system they bump.
@@ -33,7 +41,7 @@ NavScreen {
         if (focusedCanFavorite)
             list.push({ action: InputRouter.Favorite, label: qsTr("Favorite") })
         list.push({ action: InputRouter.Options, label: qsTr("Options") },
-                  { action: InputRouter.PageDown, label: qsTr("Page"),
+                  { action: InputRouter.PageDown, label: _isSystem ? qsTr("A–Z") : qsTr("Page"),
                     actions: [InputRouter.PageUp, InputRouter.PageDown] })
         if (_isSystem)
             list.push({ action: InputRouter.NextCategory, label: qsTr("System"),
@@ -69,10 +77,28 @@ NavScreen {
             grid.activateCurrent()
             return true
         case InputRouter.PageUp:
-            grid.page(-1)
+        case InputRouter.PageDown: {
+            const delta = action === InputRouter.PageUp ? -1 : 1
+            if (!_isSystem) {
+                grid.page(delta)
+                return true
+            }
+            const target = _model.letterStep(grid.currentIndex, delta)
+            if (target < 0) {
+                grid.bump(delta < 0 ? "up" : "down")
+                return true
+            }
+            grid.jumpTo(target)
+            _showLetter(_model.letterAt(target))
             return true
-        case InputRouter.PageDown:
-            grid.page(1)
+        }
+        case InputRouter.Letter:
+            if (!_isSystem || grid.count === 0)
+                return false
+            if (grid.jumpToLetter(arg) || _model.firstIndexForLetter(arg) === grid.currentIndex)
+                _showLetter(_model.letterAt(grid.currentIndex))   // moved, or already there
+            else
+                grid.bump("down")   // nothing at or after that letter
             return true
         case InputRouter.PrevCategory:
         case InputRouter.NextCategory:
@@ -100,6 +126,25 @@ NavScreen {
         }
     }
 
+    function _showLetter(letter: string) {
+        letterBadge.text = letter
+        letterBadge.opacity = 1
+        letterFade.restart()
+    }
+
+    readonly property var _system: _isSystem ? Library.system(params.system) : ({})
+    // What to tell someone looking at an empty system.
+    readonly property string _emptyHint: {
+        if (!_isSystem)
+            return ""
+        if (_system.kind === "steam")
+            return qsTr("No installed Steam games found. Install games in Steam; they show up here.")
+        const exts = (_system.extensions ?? []).slice(0, 4).map(e => "." + e).join(" ")
+        const dir = (_system.romDirs ?? [])[0] ?? ""
+        return Library.scanning ? qsTr("Looking for games…")
+                                : qsTr("No games yet. Put %1 files in %2").arg(exts).arg(dir)
+    }
+
     Component.onCompleted: {
         if (!valid)
             return
@@ -115,7 +160,9 @@ NavScreen {
         detail: {
             const row = games.focusedItem
             if (!row && games._isFavorites)
-                return qsTr("Press X (F) on any game, app or system to pin it here")
+                return qsTr("Press X (Insert) on any game, app or system to pin it here")
+            if (grid.count === 0 && games._isSystem)
+                return games._emptyHint
             const position = grid.count > 0
                 ? qsTr("%1 of %2").arg(grid.currentIndex + 1).arg(grid.count) : qsTr("No games")
             if (!row)
@@ -131,6 +178,9 @@ NavScreen {
         anchors { top: header.bottom; bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
         anchors.topMargin: Theme.spacingS
         availableWidth: games.width
+        // A saved game position survives until the library's first scan.
+        keepPendingKey: true
+        sourceReady: games._isFavorites ? AppRegistry.ready && Library.scanned : Library.scanned
         model: games._model
         active: games.focusShown
         onCurrentDataChanged: games._updateFocused()
@@ -141,5 +191,33 @@ NavScreen {
         onCurrentItemChanged: games._updateFocused()
         onCountChanged: games._updateFocused()
         onActivated: (index) => games.activateItem(games._model.get(index))
+    }
+
+    // Where an A-Z jump landed: a big letter that fades out.
+    Rectangle {
+        id: letterBadgeBox
+        anchors.centerIn: grid
+        width: Theme.posterWidth
+        height: width
+        radius: Theme.radius
+        color: Theme.surfaceHigh
+        opacity: letterBadge.opacity
+        visible: opacity > 0
+        Text {
+            id: letterBadge
+            objectName: "letterBadge"
+            textFormat: Text.PlainText
+            anchors.centerIn: parent
+            opacity: 0
+            color: Theme.text
+            font.family: Theme.fontFamily
+            font.pixelSize: parent.height * 0.6
+            font.weight: Font.Bold
+        }
+        NumberAnimation {
+            id: letterFade
+            target: letterBadge; property: "opacity"; from: 1; to: 0
+            duration: 900; easing.type: Easing.InQuad
+        }
     }
 }

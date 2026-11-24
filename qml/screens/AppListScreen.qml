@@ -4,12 +4,13 @@ import MightyOS.UI
 
 // Settings > All apps: every application AppRegistry found (.desktop files
 // from the XDG and Flatpak dirs, MightyOS manifests), sorted by name, as a
-// grid. Accept launches; X / F toggles a favorite.
+// grid. Accept launches; X / Insert toggles a favorite.
 //
 // params: {}
 NavScreen {
     id: apps
 
+    valid: !Library.restricted   // kids profiles: no app list / settings
     title: qsTr("All apps")
 
     prompts: [
@@ -33,6 +34,10 @@ NavScreen {
             return true
         case InputRouter.Accept:
             grid.activateCurrent()
+            return true
+        case InputRouter.Letter:
+            if (!grid.jumpToLetter(arg) && grid.model && grid.model.firstIndexForLetter(arg) !== grid.currentIndex)
+                grid.bump("down")   // nothing at or after that letter
             return true
         case InputRouter.PageUp:
             grid.page(-1)

@@ -5,7 +5,9 @@ import "../Catalog.js" as Catalog
 
 // The systems of one category: Emulators -> [NES, SNES, ...] and
 // Games -> [Steam]. Steam is a system like any emulator (PLAN D12), so both
-// use this screen and both open GameGrid. Model: Library.systems().
+// use this screen and both open GameGrid. Model: Library.systems(): only
+// systems with games, then a "+N more" tile that shows the others too
+// (Settings.showAllSystems; Options toggles it back).
 //
 // params: { category: "emulators" | "games" }
 NavScreen {
@@ -77,7 +79,9 @@ NavScreen {
         InfoHeader {
             width: parent.width
             heading: systems.focusedItem ? systems.focusedItem.title : systems.title
-            detail: systems.focusedItem ? systems.focusedItem.subtitle : ""
+            detail: systems.focusedItem ? systems.focusedItem.subtitle
+                  : Library.restricted ? qsTr("Nothing is allowed for this profile yet. Ask a parent.")
+                  : Library.scanning ? qsTr("Looking for games…") : ""
         }
 
         Item {
@@ -88,6 +92,8 @@ NavScreen {
                 id: row
                 anchors.verticalCenter: parent.verticalCenter
                 model: systems._model
+                keepPendingKey: true
+                sourceReady: Library.scanned
                 active: systems.focusShown
                 onCurrentDataChanged: systems._updateFocused()
                 onCurrentIndexChanged: {

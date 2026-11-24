@@ -81,13 +81,15 @@ void TestInputRouter::keyTable_data()
     QTest::newRow("esc") << int(Qt::Key_Escape) << none << Action::Back << QString();
     QTest::newRow("backspace") << int(Qt::Key_Backspace) << none << Action::Back << QString();
     QTest::newRow("remote-back") << int(Qt::Key_Back) << none << Action::Back << QString();
-    QTest::newRow("f") << int(Qt::Key_F) << none << Action::Favorite << QString();
+    QTest::newRow("insert") << int(Qt::Key_Insert) << none << Action::Favorite << QString();
+    QTest::newRow("ctrl-d") << int(Qt::Key_D) << int(Qt::ControlModifier) << Action::Favorite << QString();
     QTest::newRow("slash") << int(Qt::Key_Slash) << none << Action::Search << QString();
     QTest::newRow("shift-slash") << int(Qt::Key_Slash) << int(Qt::ShiftModifier) << Action::Search << QString();
     QTest::newRow("ctrl-f") << int(Qt::Key_F) << int(Qt::ControlModifier) << Action::Search << QString();
-    QTest::newRow("m") << int(Qt::Key_M) << none << Action::Options << QString();
+    QTest::newRow("tab") << int(Qt::Key_Tab) << none << Action::Options << QString();
+    QTest::newRow("shift-f10") << int(Qt::Key_F10) << int(Qt::ShiftModifier) << Action::Options << QString();
     QTest::newRow("menu") << int(Qt::Key_Menu) << none << Action::Options << QString();
-    QTest::newRow("q") << int(Qt::Key_Q) << none << Action::QuickPanel << QString();
+    QTest::newRow("f12") << int(Qt::Key_F12) << none << Action::QuickPanel << QString();
     QTest::newRow("pgup") << int(Qt::Key_PageUp) << none << Action::PrevCategory << QString();
     QTest::newRow("pgdn") << int(Qt::Key_PageDown) << none << Action::NextCategory << QString();
     QTest::newRow("home") << int(Qt::Key_Home) << none << Action::PageUp << QString();
@@ -98,14 +100,19 @@ void TestInputRouter::keyTable_data()
     QTest::newRow("ctrl-left") << int(Qt::Key_Left) << int(Qt::ControlModifier) << Action::None << QString();
     QTest::newRow("alt-f") << int(Qt::Key_F) << int(Qt::AltModifier) << Action::None << QString();
     QTest::newRow("ctrl-q") << int(Qt::Key_Q) << int(Qt::ControlModifier) << Action::None << QString();
-    QTest::newRow("shift-f") << int(Qt::Key_F) << int(Qt::ShiftModifier) << Action::None << QString();
-    QTest::newRow("shift-m") << int(Qt::Key_M) << int(Qt::ShiftModifier) << Action::None << QString();
-    QTest::newRow("shift-q") << int(Qt::Key_Q) << int(Qt::ShiftModifier) << Action::None << QString();
+    // Letters and digits jump (M4): no letter is an action any more.
+    QTest::newRow("f=letter") << int(Qt::Key_F) << none << Action::Letter << QStringLiteral("F");
+    QTest::newRow("m=letter") << int(Qt::Key_M) << none << Action::Letter << QStringLiteral("M");
+    QTest::newRow("q=letter") << int(Qt::Key_Q) << none << Action::Letter << QStringLiteral("Q");
+    QTest::newRow("shift-f=letter") << int(Qt::Key_F) << int(Qt::ShiftModifier) << Action::Letter << QStringLiteral("F");
+    QTest::newRow("digit") << int(Qt::Key_7) << none << Action::Letter << QStringLiteral("7");
+    QTest::newRow("ctrl-m") << int(Qt::Key_M) << int(Qt::ControlModifier) << Action::None << QString();
+    QTest::newRow("f10") << int(Qt::Key_F10) << none << Action::None << QString();
     QTest::newRow("shift-space") << int(Qt::Key_Space) << int(Qt::ShiftModifier) << Action::None << QString();
     QTest::newRow("shift-left") << int(Qt::Key_Left) << int(Qt::ShiftModifier) << Action::None << QString();
     QTest::newRow("ctrl-slash") << int(Qt::Key_Slash) << int(Qt::ControlModifier) << Action::None << QString();
-    QTest::newRow("a") << int(Qt::Key_A) << none << Action::None << QString();
-    QTest::newRow("tab") << int(Qt::Key_Tab) << none << Action::None << QString();
+    QTest::newRow("a=letter") << int(Qt::Key_A) << none << Action::Letter << QStringLiteral("A");
+    QTest::newRow("backtab") << int(Qt::Key_Backtab) << int(Qt::ShiftModifier) << Action::None << QString();
 }
 
 void TestInputRouter::keyTable()
@@ -143,7 +150,7 @@ void TestInputRouter::repeatPolicy()
     QCOMPARE(spy.at(2).at(0).value<Action>(), Action::Accept);
 
     // Unmapped keys are not consumed.
-    QVERIFY(!sendKey(router, Qt::Key_A));
+    QVERIFY(!sendKey(router, Qt::Key_F1));
 }
 
 void TestInputRouter::muteWindow()
@@ -301,7 +308,7 @@ void TestInputRouter::windowFilterMapsKeysAndBackButton()
 
     QKeyEvent press(QEvent::KeyPress, Qt::Key_Down, Qt::NoModifier);
     QKeyEvent release(QEvent::KeyRelease, Qt::Key_Down, Qt::NoModifier);
-    QKeyEvent unmapped(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier, QStringLiteral("a"));
+    QKeyEvent unmapped(QEvent::KeyPress, Qt::Key_F1, Qt::NoModifier);
     QVERIFY(router.eventFilter(&window, &press));
     QVERIFY(router.eventFilter(&window, &release));     // releases are consumed, not delivered
     QVERIFY(!router.eventFilter(&window, &unmapped));
@@ -359,17 +366,18 @@ void TestInputRouter::mappedKeysNeverReachQuickItems()
     QSignalSpy spy(&router, &InputRouter::triggered);
 
     const QList<Qt::Key> mapped { Qt::Key_Down, Qt::Key_Return, Qt::Key_Escape, Qt::Key_Backspace,
-                                  Qt::Key_F, Qt::Key_M, Qt::Key_Q, Qt::Key_PageDown, Qt::Key_End };
+                                  Qt::Key_Insert, Qt::Key_Tab, Qt::Key_F12, Qt::Key_A, Qt::Key_PageDown,
+                                  Qt::Key_End };
     for (Qt::Key key : mapped)
         QTest::keyClick(&view, key);
     QCOMPARE(spy.count(), mapped.size());
     QCOMPARE(view.rootObject()->property("seen").toList().size(), 0);
 
-    QTest::keyClick(&view, Qt::Key_A);
-    QTest::keyClick(&view, Qt::Key_F, Qt::ShiftModifier);   // unmapped chord (sends Shift, then F)
+    QTest::keyClick(&view, Qt::Key_F1);
+    QTest::keyClick(&view, Qt::Key_F, Qt::AltModifier);   // unmapped chord (sends Alt, then F)
     const QVariantList seen = view.rootObject()->property("seen").toList();
     QVERIFY(seen.size() >= 2);
-    QCOMPARE(seen.first().toInt(), int(Qt::Key_A));
+    QCOMPARE(seen.first().toInt(), int(Qt::Key_F1));
     QCOMPARE(seen.last().toInt(), int(Qt::Key_F));
     QCOMPARE(spy.count(), mapped.size());
 }

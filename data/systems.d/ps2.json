@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "ps2",
+  "label": "PS2",
+  "fullName": "Sony PlayStation 2",
+  "category": "emulators",
+  "order": 91,
+  "icon": "disc",
+  "tint": "#5a7dff",
+  "extensions": [
+    "iso",
+    "chd",
+    "cso",
+    "zso",
+    "cue",
+    "m3u"
+  ],
+  "romDirs": [
+    "~/ROMs/ps2"
+  ],
+  "emulators": [
+    {
+      "id": "pcsx2",
+      "label": "PCSX2",
+      "type": "flatpak",
+      "app": "net.pcsx2.PCSX2",
+      "args": [
+        "-batch",
+        "-fullscreen",
+        "--",
+        "{rom}"
+      ]
+    }
+  ],
+  "defaultEmulator": "pcsx2"
+}

@@ -42,7 +42,7 @@ Item {
     // The model row under the focus ring, or null. Set by the screen.
     property var focusedItem: null
     readonly property string focusedAcceptLabel: acceptLabel(focusedItem)
-    // Whether the focused item can be a favorite (X / F), for prompts.
+    // Whether the focused item can be a favorite (X / Insert), for prompts.
     readonly property bool focusedCanFavorite: canFavorite(focusedItem)
     // PLAN D18: false on screens the TV remote must not operate (secure
     // screens in M8); while such a screen is on top the remote can only go
@@ -62,6 +62,9 @@ Item {
     signal launchRequested(var item)
     signal toastRequested(string message, bool isError)
     signal dialogRequested(var spec)
+    // A second-level menu (e.g. "Emulator…"): NavStack shows it like the
+    // options menu and hands the answer to optionChosen().
+    signal menuRequested(string title, var items)
     // Open the profile picker (Home options, Settings > Profiles).
     signal profilePickerRequested()
 
@@ -104,6 +107,16 @@ Item {
 
     // --- Shared behaviour (driven by the focused row's `kind`) -------------
 
+    // PLAN D13: a kids profile has no store, settings, app list, profile
+    // management or artwork setup. A UI restriction, not a security boundary.
+    function isRestrictedEntry(row: var): bool {
+        if (!row)
+            return false
+        if (row.kind === "category")
+            return row.key === "store" || row.key === "settings"
+        return ["profiles", "allapps", "controllers", "power", "artwork", "section"].indexOf(row.kind) >= 0
+    }
+
     function canFavorite(row: var): bool {
         return !!row && (row.kind === "game" || row.kind === "app" || row.kind === "system")
     }
@@ -115,6 +128,7 @@ Item {
             return qsTr("Remove")
         return row.kind === "game" ? qsTr("Play")
              : row.kind === "app" ? qsTr("Launch")
+             : row.kind === "showall" ? qsTr("Show")
              : qsTr("Open")
     }
 
@@ -123,6 +137,10 @@ Item {
             return
         if (row.available === false) {
             _confirmRemoveUnavailable(row)
+            return
+        }
+        if (Library.restricted && isRestrictedEntry(row)) {
+            toastRequested(qsTr("Ask a parent: this isn't available in a kids profile"), false)
             return
         }
         switch (row.kind) {
@@ -134,6 +152,15 @@ Item {
         }
         case "system":
             openRequested("games", { system: row.key })
+            break
+        case "showall":
+            // "+N more" at the end of a system row: list empty systems too.
+            Settings.showAllSystems = true
+            if (!Settings.showAllSystems)
+                toastRequested(qsTr("Could not save the setting"), true)
+            break
+        case "artwork":
+            openRequested("artwork", {})
             break
         case "game":
         case "app":
@@ -270,10 +297,20 @@ Item {
                                       destructive: row.available === false }
                                   : { id: "favorite", label: qsTr("Add to Favorites") })
         }
-        if ((row.kind === "game" || row.kind === "app") && row.available !== false)
+        if (row.kind === "game" && row.available !== false) {
+            if (Library.emulatorChoices(row.key).length > 1)
+                items.push({ id: "emulator", label: qsTr("Emulator…") })
             items.push({ id: "info", label: qsTr("Details") })
-        if (row.kind === "system" && row.available !== false)
-            items.push({ id: "scan", label: qsTr("Scan for games") })
+        }
+        if (row.kind === "system" || row.kind === "showall") {
+            if (row.kind === "system" && Library.emulatorChoices(row.key).length > 1)
+                items.push({ id: "emulator", label: qsTr("Default emulator…") })
+            if (!Library.mock)
+                items.push({ id: "scan", label: qsTr("Scan for games") })
+            if (!Library.mock && !Library.restricted)
+                items.push({ id: "showAll", label: Settings.showAllSystems ? qsTr("Hide systems without games")
+                                                                           : qsTr("Show all systems") })
+        }
         return items.concat(extraOptions())
     }
 
@@ -288,9 +325,64 @@ Item {
         case "favorite":  favoriteFocused(); break
         case "moveLeft":  moveFavorite(row.key, -1); break
         case "moveRight": moveFavorite(row.key, 1); break
-        case "info":      toastRequested(qsTr("Details arrive with the library in M4"), false); break
-        case "scan":      toastRequested(qsTr("ROM scanning arrives in M4"), false); break
+        case "info":      _showDetails(row); break
+        case "emulator":  _chooseEmulator(row); break
+        case "scan":
+            Library.rescan()
+            toastRequested(qsTr("Scanning for games…"), false)
+            break
+        case "showAll":
+            Settings.showAllSystems = !Settings.showAllSystems
+            break
+        default:
+            if (id.startsWith("emu:"))
+                _setEmulator(row, id.slice(4))
+            break
         }
+    }
+
+    // Per-profile emulator for a game or (on a system tile) its default.
+    function _chooseEmulator(row: var) {
+        const choices = Library.emulatorChoices(row.key)
+        const items = choices.map(c => ({
+            id: "emu:" + c.id,
+            label: c.label + (c.selected ? "  ·  " + qsTr("current") : "")
+                   + (c.available ? "" : "  ·  " + qsTr("not installed"))
+        }))
+        if (row.kind === "game")
+            items.push({ id: "emu:", label: qsTr("Use the system default") })
+        menuRequested(row.kind === "game" ? qsTr("Play %1 with").arg(row.title)
+                                          : qsTr("%1 games play with").arg(row.title), items)
+    }
+
+    function _setEmulator(row: var, emulatorId: string) {
+        if (!Library.setEmulator(row.key, emulatorId)) {
+            toastRequested(qsTr("Could not save the emulator choice"), true)
+            return
+        }
+        const chosen = Library.emulatorChoices(row.key).find(c => c.selected)
+        if (chosen && !chosen.available)
+            toastRequested(qsTr("%1 is not installed yet. Install it from the App Store.").arg(chosen.label), false)
+        else if (chosen)
+            toastRequested(qsTr("%1 plays with %2").arg(row.title).arg(chosen.label), false)
+    }
+
+    function _showDetails(row: var) {
+        if (row.kind !== "game") {
+            toastRequested(qsTr("%1").arg(row.subtitle || row.title), false)
+            return
+        }
+        const d = Library.details(row.key)
+        const lines = []
+        if (d.system) lines.push(d.system)
+        if (d.region) lines.push(qsTr("Region: %1").arg(d.region))
+        if (d.tags) lines.push(qsTr("Tags: %1").arg(d.tags))
+        if (d.discs > 1) lines.push(qsTr("Discs: %1").arg(d.discs))
+        if (d.emulator) lines.push(qsTr("Plays with: %1").arg(d.emulator))
+        if (d.file) lines.push(qsTr("File: %1").arg(d.file))
+        if (d.folder) lines.push(qsTr("Folder: %1").arg(d.folder))
+        dialogRequested({ title: row.title, message: lines.join("\n"),
+                          buttons: [{ id: "close", label: qsTr("Close") }] })
     }
 
     // Reorders a favorite; the moved tile keeps the focus (the model moves
@@ -304,7 +396,7 @@ Item {
         }
     }
 
-    // X / F. Returns true if the focused item can be a favorite (the action
+    // X / Insert. Returns true if the focused item can be a favorite (the action
     // is then consumed, whatever the outcome).
     function favoriteFocused(): bool {
         const row = focusedRow()

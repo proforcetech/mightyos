@@ -212,9 +212,9 @@ Item {
         if (depth === 0)
             push("home", {}, false)
         _restoring = false
-        // Write back the cleaned-up path, but not before the first app scan:
-        // app-backed positions may only be pending, not gone.
-        if (AppRegistry.ready)
+        // Write back the cleaned-up path, but not before the first app and
+        // library scans: those positions may only be pending, not gone.
+        if (AppRegistry.ready && Library.scanned)
             persist()
     }
 
@@ -255,6 +255,10 @@ Item {
             launch: item => stack.launchRequested(item),
             toast: (message, isError) => stack.toastRequested(message, isError),
             dialog: spec => stack.dialogRequested(spec),
+            menu: (title, items) => {
+                stack._optionsScreen = screen
+                stack.optionsRequested(title, items)
+            },
             profiles: () => stack.profilePickerRequested()
         }
         screen.navStateChanged.connect(handlers.navState)
@@ -263,6 +267,7 @@ Item {
         screen.launchRequested.connect(handlers.launch)
         screen.toastRequested.connect(handlers.toast)
         screen.dialogRequested.connect(handlers.dialog)
+        screen.menuRequested.connect(handlers.menu)
         screen.profilePickerRequested.connect(handlers.profiles)
         screen._stackConnections = handlers
     }
@@ -278,6 +283,7 @@ Item {
         screen.launchRequested.disconnect(handlers.launch)
         screen.toastRequested.disconnect(handlers.toast)
         screen.dialogRequested.disconnect(handlers.dialog)
+        screen.menuRequested.disconnect(handlers.menu)
         screen.profilePickerRequested.disconnect(handlers.profiles)
     }
 

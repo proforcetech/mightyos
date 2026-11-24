@@ -86,18 +86,26 @@ void InputRouter::attachToWindow(QWindow *window)
 InputRouter::KeyBinding InputRouter::keyActionFor(int key, Qt::KeyboardModifiers modifiers)
 {
     // Keypad arrows/Enter carry KeypadModifier, which changes nothing.
-    // Shift is only accepted for '/' (it needs Shift on e.g. German
-    // layouts); Shift+F/M/Q/Space etc. stay unmapped.
+    // Shift is accepted for '/' (it needs Shift on e.g. German layouts),
+    // for letters (Caps-style typing) and for Shift+F10 (the standard
+    // context-menu key); other Shift/Ctrl/Alt/Meta chords stay unmapped.
     const Qt::KeyboardModifiers mods = modifiers & ~Qt::KeypadModifier;
 
     if (mods == Qt::ControlModifier && key == Qt::Key_F)
         return { Action::Search, {} };
+    if (mods == Qt::ControlModifier && key == Qt::Key_D)
+        return { Action::Favorite, {} };
     if (mods == Qt::ControlModifier && key == Qt::Key_Home)
         return { Action::Guide, {} };
     if (mods == Qt::ShiftModifier && key == Qt::Key_Slash)
         return { Action::Search, {} };
+    if (mods == Qt::ShiftModifier && key == Qt::Key_F10)
+        return { Action::Options, {} };
+    if ((mods == Qt::NoModifier || mods == Qt::ShiftModifier)
+        && ((key >= Qt::Key_A && key <= Qt::Key_Z) || (key >= Qt::Key_0 && key <= Qt::Key_9)))
+        return { Action::Letter, QString(QChar(key)) };
     if (mods != Qt::NoModifier)
-        return {};   // leave Shift/Ctrl/Alt/Meta chords alone
+        return {};   // leave the other chords alone
 
     switch (key) {
     case Qt::Key_Left:      return { Action::Navigate, QStringLiteral("left") };
@@ -114,16 +122,16 @@ InputRouter::KeyBinding InputRouter::keyActionFor(int key, Qt::KeyboardModifiers
     case Qt::Key_Backspace:
     case Qt::Key_Back:      return { Action::Back, {} };
 
-    case Qt::Key_F:
+    case Qt::Key_Insert:
     case Qt::Key_Favorites: return { Action::Favorite, {} };
 
     case Qt::Key_Slash:
     case Qt::Key_Search:    return { Action::Search, {} };
 
-    case Qt::Key_M:
-    case Qt::Key_Menu:      return { Action::Options, {} };
+    case Qt::Key_Menu:
+    case Qt::Key_Tab:       return { Action::Options, {} };
 
-    case Qt::Key_Q:         return { Action::QuickPanel, {} };
+    case Qt::Key_F12:       return { Action::QuickPanel, {} };
 
     case Qt::Key_PageUp:    return { Action::PrevCategory, {} };
     case Qt::Key_PageDown:  return { Action::NextCategory, {} };

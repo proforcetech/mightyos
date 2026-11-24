@@ -9,7 +9,8 @@
 // Global (not per-profile) settings, PLAN section 2.
 //
 // File: $XDG_CONFIG_HOME/mightyos/settings.json
-//   { "version": 1, "rumble": true, "tvRemote": "navigation" }
+//   { "version": 1, "rumble": true, "tvRemote": "navigation",
+//     "showAllSystems": false }
 //
 // Each setting is a typed property with a default; unknown keys in the file
 // are kept on write (a newer MightyOS may have added them). Writes are
@@ -34,6 +35,8 @@ class Settings : public QObject
     // HDMI-CEC TV remote trust level (PLAN D18): "off", "navigation"
     // (default: move, OK, Back, page, category, Home) or "full".
     Q_PROPERTY(QString tvRemote READ tvRemote WRITE setTvRemote NOTIFY tvRemoteChanged FINAL)
+    // Emulators / Games list systems without games too (default off).
+    Q_PROPERTY(bool showAllSystems READ showAllSystems WRITE setShowAllSystems NOTIFY showAllSystemsChanged FINAL)
     Q_PROPERTY(bool writable READ isWritable NOTIFY writableChanged FINAL)
 
 public:
@@ -52,6 +55,8 @@ public:
     void setRumble(bool rumble);
     QString tvRemote() const { return m_tvRemote; }
     void setTvRemote(const QString &mode);
+    bool showAllSystems() const { return m_showAllSystems; }
+    void setShowAllSystems(bool show);
 
     // Re-reads the file (tests).
     Q_INVOKABLE void reload();
@@ -59,6 +64,7 @@ public:
 signals:
     void rumbleChanged();
     void tvRemoteChanged();
+    void showAllSystemsChanged();
     void writableChanged();
     void writeFailed();
 
@@ -72,4 +78,5 @@ private:
     bool m_writable = true;
     bool m_rumble = true;
     QString m_tvRemote = QStringLiteral("navigation");
+    bool m_showAllSystems = false;
 };

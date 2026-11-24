@@ -1,5 +1,7 @@
 #include "tilelistmodel.h"
 
+#include <QSet>
+
 TileListModel::TileListModel(QObject *parent)
     : QAbstractListModel(parent)
 {
@@ -53,6 +55,11 @@ QHash<int, QByteArray> TileListModel::roleNames() const
     return names;
 }
 
+QString TileListModel::sortKeyOf(const TileItem &item)
+{
+    return sortKey(item.sortTitle.isEmpty() ? item.title : item.sortTitle);
+}
+
 void TileListModel::rebuildIndex()
 {
     m_index.clear();
@@ -60,10 +67,50 @@ void TileListModel::rebuildIndex()
     m_sortKeys.clear();
     m_sortKeys.reserve(m_items.size());
     for (const TileItem &item : std::as_const(m_items))
-        m_sortKeys.append(sortKey(item.sortTitle.isEmpty() ? item.title : item.sortTitle));
-    // Walk backwards so that, with duplicate keys, the first row wins.
-    for (int i = count() - 1; i >= 0; --i)
-        m_index.insert(m_items.at(i).key, i);
+        m_sortKeys.append(sortKeyOf(item));
+    reindexFrom(0);
+}
+
+// Re-numbers the hash for rows >= `row` (their position changed). With
+// duplicate keys the "first row wins" rule needs the whole list, so the
+// hash is rebuilt in full then (rare: favorites and libraries are unique).
+void TileListModel::reindexFrom(int row)
+{
+    if (m_duplicates || row <= 0) {
+        m_index.clear();
+        m_index.reserve(m_items.size());
+        m_duplicates = false;
+        for (int i = 0; i < count(); ++i) {
+            const auto inserted = m_index.tryEmplace(m_items.at(i).key, i);
+            if (!inserted.inserted)
+                m_duplicates = true;
+        }
+        return;
+    }
+    for (int i = row; i < count(); ++i) {
+        const QString &key = m_items.at(i).key;
+        const auto found = m_index.constFind(key);
+        if (found != m_index.cend() && found.value() < row) {
+            m_duplicates = true;   // an earlier row has this key: keep it
+            continue;
+        }
+        m_index.insert(key, i);
+    }
+}
+
+void TileListModel::resetTo(const QList<TileItem> &items)
+{
+    const int oldCount = count();
+    emit itemsAboutToReset();
+    beginResetModel();
+    m_items = items;
+    m_duplicates = false;
+    rebuildIndex();
+    endResetModel();
+    ++m_resets;
+    if (oldCount != count())
+        emit countChanged();
+    emit itemsReset();
 }
 
 void TileListModel::setItems(const QList<TileItem> &items)
@@ -78,41 +125,174 @@ void TileListModel::setItems(const QList<TileItem> &items)
         for (int i = 0; i < count(); ++i) {
             if (m_items.at(i) == items.at(i))
                 continue;
+            const bool resort = m_items.at(i).title != items.at(i).title
+                                || m_items.at(i).sortTitle != items.at(i).sortTitle;
             m_items[i] = items.at(i);
+            if (resort)
+                m_sortKeys[i] = sortKeyOf(m_items.at(i));
             const QModelIndex idx = index(i);
             emit dataChanged(idx, idx);
         }
         return;
     }
 
+    // Diff: only for unique keys on both sides.
+    QHash<QString, int> wanted;
+    wanted.reserve(items.size());
+    bool unique = !m_duplicates;
+    for (int i = 0; unique && i < items.size(); ++i)
+        unique = wanted.tryEmplace(items.at(i).key, i).inserted;
+    if (!unique || m_items.isEmpty() || items.isEmpty()) {
+        resetTo(items);
+        return;
+    }
+
+    // Survivors (old rows that stay) must keep their relative order, and
+    // the edit must be a few contiguous runs: every run is one
+    // begin/endInsertRows (or Remove) that views process separately, so a
+    // scattered edit (thousands of runs) is cheaper as one reset.
+    QSet<QString> oldKeys;
+    oldKeys.reserve(m_items.size());
+    int lastPosition = -1;
+    int removeRuns = 0;
+    bool inRemoved = false;
+    for (const TileItem &item : std::as_const(m_items)) {
+        oldKeys.insert(item.key);
+        const auto found = wanted.constFind(item.key);
+        if (found == wanted.cend()) {
+            removeRuns += inRemoved ? 0 : 1;
+            inRemoved = true;
+            continue;
+        }
+        inRemoved = false;
+        if (found.value() < lastPosition) {
+            resetTo(items);
+            return;
+        }
+        lastPosition = found.value();
+    }
+    int insertRuns = 0;
+    bool inInserted = false;
+    int survivors = 0;
+    for (const TileItem &item : items) {
+        const bool isNew = !oldKeys.contains(item.key);
+        survivors += isNew ? 0 : 1;
+        insertRuns += (isNew && !inInserted) ? 1 : 0;
+        inInserted = isNew;
+    }
+    if (survivors == 0 || removeRuns + insertRuns > kMaxDiffRuns) {
+        resetTo(items);
+        return;
+    }
+
     const int oldCount = count();
-    emit itemsAboutToReset();
-    beginResetModel();
-    m_items = items;
-    rebuildIndex();
-    endResetModel();
+    int firstTouched = count();
+    // 1. Remove runs of vanished keys, from the end so row numbers hold.
+    //    The key hash is rebuilt once, at the end.
+    for (int i = count() - 1; i >= 0;) {
+        if (wanted.contains(m_items.at(i).key)) {
+            --i;
+            continue;
+        }
+        int first = i;
+        while (first > 0 && !wanted.contains(m_items.at(first - 1).key))
+            --first;
+        beginRemoveRows(QModelIndex(), first, i);
+        m_items.remove(first, i - first + 1);
+        m_sortKeys.remove(first, i - first + 1);
+        endRemoveRows();
+        firstTouched = qMin(firstTouched, first);
+        i = first - 1;
+    }
+    // 2. Insert runs of new keys at their final positions (ascending, so
+    //    every row before `i` already matches `items`).
+    for (int i = 0; i < items.size();) {
+        if (i < count() && m_items.at(i).key == items.at(i).key) {
+            if (!(m_items.at(i) == items.at(i))) {
+                const bool resort = m_items.at(i).title != items.at(i).title
+                                    || m_items.at(i).sortTitle != items.at(i).sortTitle;
+                m_items[i] = items.at(i);
+                if (resort)
+                    m_sortKeys[i] = sortKeyOf(m_items.at(i));
+                const QModelIndex idx = index(i);
+                emit dataChanged(idx, idx);
+            }
+            ++i;
+            continue;
+        }
+        // items[i] is new (every survivor before it already matched); the
+        // run continues while the keys are new too.
+        int last = i;
+        while (last + 1 < items.size() && !oldKeys.contains(items.at(last + 1).key))
+            ++last;
+        insertRun(i, items.mid(i, last - i + 1), false);
+        firstTouched = qMin(firstTouched, i);
+        i = last + 1;
+    }
+    Q_ASSERT(m_items == items);
+    if (firstTouched < count() || oldCount != count()) {
+        // Drop hash entries of removed keys, then renumber from the first
+        // changed row (one pass).
+        for (const QString &key : std::as_const(oldKeys)) {
+            if (!wanted.contains(key))
+                m_index.remove(key);
+        }
+        reindexFrom(firstTouched);
+    }
     if (oldCount != count())
         emit countChanged();
-    emit itemsReset();
 }
 
 void TileListModel::insertItem(int row, const TileItem &item)
 {
-    row = qBound(0, row, count());
-    beginInsertRows(QModelIndex(), row, row);
-    m_items.insert(row, item);
-    rebuildIndex();
-    endInsertRows();
+    insertItems(row, { item });
+}
+
+void TileListModel::insertItems(int row, const QList<TileItem> &items)
+{
+    if (items.isEmpty())
+        return;
+    insertRun(qBound(0, row, count()), items, true);
     emit countChanged();
+}
+
+void TileListModel::insertRun(int row, const QList<TileItem> &items, bool reindex)
+{
+    const int last = row + static_cast<int>(items.size()) - 1;
+    beginInsertRows(QModelIndex(), row, last);
+    m_items.insert(row, items.size(), TileItem());
+    QStringList keys;
+    keys.reserve(items.size());
+    for (qsizetype i = 0; i < items.size(); ++i) {
+        m_items[row + i] = items.at(i);
+        keys.append(sortKeyOf(items.at(i)));
+    }
+    m_sortKeys.insert(row, keys.size(), QString());
+    for (qsizetype i = 0; i < keys.size(); ++i)
+        m_sortKeys[row + i] = keys.at(i);
+    if (reindex)
+        reindexFrom(row);
+    endInsertRows();
 }
 
 bool TileListModel::removeAt(int row)
 {
-    if (row < 0 || row >= count())
+    return removeItems(row, 1);
+}
+
+bool TileListModel::removeItems(int row, int n)
+{
+    if (row < 0 || n <= 0 || row + n > count())
         return false;
-    beginRemoveRows(QModelIndex(), row, row);
-    m_items.removeAt(row);
-    rebuildIndex();
+    beginRemoveRows(QModelIndex(), row, row + n - 1);
+    for (int i = row; i < row + n; ++i) {
+        const auto found = m_index.constFind(m_items.at(i).key);
+        if (found != m_index.cend() && found.value() == i)
+            m_index.remove(m_items.at(i).key);
+    }
+    m_items.remove(row, n);
+    m_sortKeys.remove(row, n);
+    reindexFrom(m_duplicates ? 0 : row);
     endRemoveRows();
     emit countChanged();
     return true;
@@ -128,7 +308,8 @@ bool TileListModel::moveItem(int from, int to)
     if (!beginMoveRows(QModelIndex(), from, from, QModelIndex(), destination))
         return false;
     m_items.move(from, to);
-    rebuildIndex();
+    m_sortKeys.move(from, to);
+    reindexFrom(m_duplicates ? 0 : qMin(from, to));
     endMoveRows();
     emit itemMoved(from, to);
     return true;
@@ -140,8 +321,11 @@ bool TileListModel::updateItem(int row, const TileItem &item)
         return false;
     const bool keyChanged = m_items.at(row).key != item.key;
     m_items[row] = item;
-    if (keyChanged)
-        rebuildIndex();
+    m_sortKeys[row] = sortKeyOf(item);
+    if (keyChanged) {
+        m_duplicates = true;   // force a full, correct rebuild
+        reindexFrom(0);
+    }
     const QModelIndex idx = index(row);
     emit dataChanged(idx, idx);
     return true;
@@ -179,6 +363,45 @@ int TileListModel::firstIndexForLetter(const QString &letter) const
             return i;
     }
     return -1;
+}
+
+QString TileListModel::groupOf(const QString &key)
+{
+    if (key.isEmpty())
+        return QStringLiteral("#");
+    const QChar c = key.at(0);
+    return c.isLetter() ? QString(c).toUpper() : QStringLiteral("#");
+}
+
+QString TileListModel::letterAt(int row) const
+{
+    return (row >= 0 && row < m_sortKeys.size()) ? groupOf(m_sortKeys.at(row)) : QString();
+}
+
+int TileListModel::letterStep(int row, int delta) const
+{
+    if (row < 0 || row >= count() || delta == 0)
+        return -1;
+    const QString group = groupOf(m_sortKeys.at(row));
+    if (delta > 0) {
+        for (int i = row + 1; i < count(); ++i) {
+            if (groupOf(m_sortKeys.at(i)) != group)
+                return i;
+        }
+        return -1;
+    }
+    int first = row;
+    while (first > 0 && groupOf(m_sortKeys.at(first - 1)) == group)
+        --first;
+    if (first < row)
+        return first;
+    if (first == 0)
+        return -1;
+    const QString previous = groupOf(m_sortKeys.at(first - 1));
+    int start = first - 1;
+    while (start > 0 && groupOf(m_sortKeys.at(start - 1)) == previous)
+        --start;
+    return start;
 }
 
 QString TileListModel::sortKey(const QString &title)
@@ -231,6 +454,7 @@ void TileListModel::clear()
     m_items.clear();
     m_index.clear();
     m_sortKeys.clear();
+    m_duplicates = false;
     endRemoveRows();
     emit countChanged();
 }

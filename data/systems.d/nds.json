@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "id": "nds",
+  "label": "DS",
+  "fullName": "Nintendo DS",
+  "category": "emulators",
+  "order": 50,
+  "icon": "handheld",
+  "tint": "#a0a8b8",
+  "extensions": [
+    "nds",
+    "zip",
+    "7z"
+  ],
+  "romDirs": [
+    "~/ROMs/nds"
+  ],
+  "emulators": [
+    {
+      "id": "melonds",
+      "label": "melonDS",
+      "type": "flatpak",
+      "app": "net.kuribo64.melonDS",
+      "args": [
+        "-f",
+        "{rom}"
+      ]
+    },
+    {
+      "id": "melondsds",
+      "label": "melonDS DS (RetroArch)",
+      "type": "retroarch",
+      "core": "melondsds"
+    },
+    {
+      "id": "desmume",
+      "label": "DeSmuME (RetroArch)",
+      "type": "retroarch",
+      "core": "desmume"
+    }
+  ],
+  "defaultEmulator": "melonds"
+}

@@ -22,7 +22,11 @@ class QWindow;
 // remote (CecService) all behave the same.
 //
 // Policy owned here:
-//  - the keyboard key -> action table (keyActionFor()),
+//  - the keyboard key -> action table (keyActionFor()). Bare letters and
+//    digits (also with Shift) are Action::Letter, type-to-jump in grids
+//    (PLAN M4: the old F/M/Q action keys clashed with A-Z). The actions
+//    use non-letter keys: Favorite = Insert / Ctrl+D, Options = Menu / Tab
+//    / Shift+F10, Quick panel = F12, Search = / or Ctrl+F,
 //  - the repeat policy: only Navigate may auto-repeat; every other action
 //    drops repeats so a held Enter cannot launch twice,
 //  - `blocked` (bound to Launcher.running in QML) and the short mute window
@@ -98,6 +102,7 @@ public:
         PageUp,
         PageDown,
         Guide,          // Home (root screen, Favorites category)
+        Letter,         // arg: "A".."Z" or "0".."9" (keyboard type-to-jump)
     };
     Q_ENUM(Action)
 

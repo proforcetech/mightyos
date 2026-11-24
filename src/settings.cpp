@@ -21,6 +21,7 @@ QString defaultConfigDir()
 
 const QString kRumble = QStringLiteral("rumble");
 const QString kTvRemote = QStringLiteral("tvRemote");
+const QString kShowAllSystems = QStringLiteral("showAllSystems");
 const QString kVersionKey = QStringLiteral("version");
 
 } // namespace
@@ -97,6 +98,11 @@ void Settings::applyRoot()
         m_rumble = rumbleValue;
         emit rumbleChanged();
     }
+    const bool showAll = m_root.value(kShowAllSystems).toBool(false);
+    if (showAll != m_showAllSystems) {
+        m_showAllSystems = showAll;
+        emit showAllSystemsChanged();
+    }
     const QString remote = m_root.value(kTvRemote).toString();
     const QString remoteValue = tvRemoteModes().contains(remote) ? remote : QStringLiteral("navigation");
     if (remoteValue != m_tvRemote) {
@@ -138,4 +144,12 @@ void Settings::setTvRemote(const QString &mode)
         return;
     m_tvRemote = mode;
     emit tvRemoteChanged();
+}
+
+void Settings::setShowAllSystems(bool show)
+{
+    if (show == m_showAllSystems || !writeKey(kShowAllSystems, show))
+        return;
+    m_showAllSystems = show;
+    emit showAllSystemsChanged();
 }

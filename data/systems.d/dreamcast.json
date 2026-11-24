@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "id": "dreamcast",
+  "label": "Dreamcast",
+  "fullName": "Sega Dreamcast",
+  "category": "emulators",
+  "order": 73,
+  "icon": "disc",
+  "tint": "#ff8c42",
+  "extensions": [
+    "gdi",
+    "cdi",
+    "chd",
+    "cue",
+    "m3u"
+  ],
+  "romDirs": [
+    "~/ROMs/dreamcast"
+  ],
+  "emulators": [
+    {
+      "id": "flycast",
+      "label": "Flycast (RetroArch)",
+      "type": "retroarch",
+      "core": "flycast"
+    },
+    {
+      "id": "flycast-standalone",
+      "label": "Flycast",
+      "type": "flatpak",
+      "app": "org.flycast.Flycast",
+      "args": [
+        "{rom}"
+      ]
+    }
+  ],
+  "defaultEmulator": "flycast"
+}

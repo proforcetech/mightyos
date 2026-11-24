@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "gbc",
+  "label": "Game Boy Color",
+  "fullName": "Nintendo Game Boy Color",
+  "category": "emulators",
+  "order": 41,
+  "icon": "handheld",
+  "tint": "#c050c8",
+  "extensions": [
+    "gbc",
+    "zip",
+    "7z"
+  ],
+  "romDirs": [
+    "~/ROMs/gbc"
+  ],
+  "emulators": [
+    {
+      "id": "gambatte",
+      "label": "Gambatte (RetroArch)",
+      "type": "retroarch",
+      "core": "gambatte"
+    },
+    {
+      "id": "sameboy",
+      "label": "SameBoy (RetroArch)",
+      "type": "retroarch",
+      "core": "sameboy"
+    },
+    {
+      "id": "mgba",
+      "label": "mGBA (RetroArch)",
+      "type": "retroarch",
+      "core": "mgba"
+    }
+  ],
+  "defaultEmulator": "gambatte"
+}
