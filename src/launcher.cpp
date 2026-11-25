@@ -5,6 +5,7 @@
 #include <QFileInfo>
 #include <QLoggingCategory>
 #include <QStandardPaths>
+#include <QTimer>
 
 #include <csignal>
 #include <memory>
@@ -215,7 +216,8 @@ bool Launcher::launch(const QString &id, const QStringList &argv, LaunchTracker 
         if (process != m_process)
             return;
         const QString id = m_currentId;
-        const int code = (status == QProcess::CrashExit) ? -1 : exitCode;
+        // Closed on request: a SIGTERM/SIGKILL ending is the expected one.
+        const int code = m_terminating ? 0 : (status == QProcess::CrashExit) ? -1 : exitCode;
         if (m_tracker && (code == 0 || m_tracker->seen())) {
             // Handed over (steam://...): the tracker decides from here.
             qCInfo(lcLauncher) << "launcher process of" << id << "exited, tracking the app";
@@ -315,8 +317,39 @@ bool Launcher::runAuxiliary(const QStringList &argv)
     return true;
 }
 
+bool Launcher::terminate()
+{
+    // Tracked launches (Steam): the process may be the Steam client, which
+    // must never be signalled; Guide uses stopTracking() for those.
+    if (!m_running || m_tracker || !m_process || m_process->state() == QProcess::NotRunning)
+        return false;
+    if (m_terminating)
+        return true;   // already closing: one SIGTERM, one escalation
+    const qint64 pid = m_process->processId();
+    if (pid <= 0)
+        return false;
+    qCInfo(lcLauncher) << "closing" << m_currentId << "on request";
+    m_terminating = true;
+    // Our children run in their own session: pgid == pid.
+    const pid_t pgid = static_cast<pid_t>(pid);
+    ::kill(-pgid, SIGTERM);
+    // Escalation by process group, owned by the Launcher: it also reaches
+    // members that outlive the leader (a wrapper that exits on SIGTERM while
+    // its child ignores it), and is independent of later launches.
+    // Caveat: a pgid is a number; M6's per-app cgroups (systemd scopes)
+    // replace this with an exact kill.
+    QTimer::singleShot(kTerminateGraceMs, this, [pgid] {
+        if (::kill(-pgid, 0) == 0) {
+            qCInfo(lcLauncher) << "process group" << pgid << "still there after SIGTERM, sending SIGKILL";
+            ::kill(-pgid, SIGKILL);
+        }
+    });
+    return true;
+}
+
 void Launcher::finish()
 {
+    m_terminating = false;
     if (m_process) {
         m_process->disconnect(this);
         m_process->deleteLater();

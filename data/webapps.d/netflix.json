@@ -1,0 +1,23 @@
+{
+    "version": 1,
+    "id": "netflix",
+    "label": "Netflix",
+    "url": "https://www.netflix.com/browse",
+    "hosts": [
+        "www.netflix.com",
+        "netflix.com"
+    ],
+    "icon": "tv",
+    "tint": "#e50914",
+    "order": 20,
+    "browser": "auto",
+    "drm": true,
+    "kidsHosts": [
+        "*.nflxvideo.net",
+        "*.nflximg.net",
+        "*.nflxext.com",
+        "*.nflxso.net",
+        "*.netflix.net"
+    ],
+    "comment": "kidsHosts: CDNs a kids profile may reach (best effort, verify by hand)."
+}

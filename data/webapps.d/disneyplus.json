@@ -1,0 +1,23 @@
+{
+    "version": 1,
+    "id": "disneyplus",
+    "label": "Disney+",
+    "url": "https://www.disneyplus.com/",
+    "hosts": [
+        "www.disneyplus.com",
+        "disneyplus.com"
+    ],
+    "icon": "tv",
+    "tint": "#113ccf",
+    "order": 30,
+    "browser": "auto",
+    "drm": true,
+    "kidsHosts": [
+        "*.disneyplus.com",
+        "*.disney-plus.net",
+        "*.dssott.com",
+        "*.bamgrid.com",
+        "*.dssedge.com"
+    ],
+    "comment": "kidsHosts: CDNs a kids profile may reach (best effort, verify by hand)."
+}

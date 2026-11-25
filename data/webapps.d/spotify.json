@@ -1,0 +1,21 @@
+{
+    "version": 1,
+    "id": "spotify",
+    "label": "Spotify",
+    "url": "https://open.spotify.com/",
+    "hosts": [
+        "open.spotify.com"
+    ],
+    "icon": "tv",
+    "tint": "#1db954",
+    "order": 60,
+    "browser": "auto",
+    "drm": true,
+    "kidsHosts": [
+        "*.spotify.com",
+        "*.scdn.co",
+        "*.spotifycdn.com",
+        "*.spotilocal.com"
+    ],
+    "comment": "kidsHosts: CDNs a kids profile may reach (best effort, verify by hand)."
+}

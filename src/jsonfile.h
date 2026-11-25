@@ -38,6 +38,15 @@ std::optional<QByteArray> readRegularFile(const QString &path, qint64 limit, boo
 bool writePrivate(const QString &base, const QStringList &subdirs, const QString &name, const QByteArray &data,
                   uint mode = 0600, QString *error = nullptr);
 
+// Removes <base>/<subdirs...>/<name> (a file, a symlink or a whole tree)
+// without following any symlink: `base` and every step are opened
+// O_NOFOLLOW | O_DIRECTORY, entries are removed with unlinkat() (a symlink
+// is removed, never followed), subdirectories are entered with openat()
+// (O_NOFOLLOW: a directory swapped for a symlink mid-walk is not entered).
+// For trees another program (a Flatpak sandbox) can write. Nothing there
+// (any step missing) is success. Depth is capped at 64.
+bool removeTreeNoFollow(const QString &base, const QStringList &subdirs, const QString &name);
+
 // Renames `path` to `path + suffix` (replacing an older one), so an
 // unusable or newer-format file is kept for the user instead of being
 // overwritten by the next write.

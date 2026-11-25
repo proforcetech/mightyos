@@ -6,6 +6,7 @@
 #include "jsonfile.h"
 #include "launcher.h"
 #include "librarycache.h"
+#include "moonlight.h"
 #include "profileservice.h"
 #include "steamtracker.h"
 #include "textsanitize.h"
@@ -63,6 +64,7 @@ struct ScanInput {
     QString cachePath;
     QHash<QString, RomRecord> cacheBase;   // the startup cache load, reused once
     bool haveCacheBase = false;
+    bool forgetOffline = false;   // drop cached games of missing ROM dirs
 };
 
 // Nearest existing directory at or above `path` (but not "/").
@@ -146,7 +148,7 @@ void runScan(QPromise<std::shared_ptr<Library::ScanOutput>> &promise, const Scan
             list.reserve(records.size());
             for (const RomRecord &r : std::as_const(records))
                 list.append(Library::gameFromRom(r, false));
-            if (!offlineRoots.isEmpty()) {
+            if (!offlineRoots.isEmpty() && !input.forgetOffline) {
                 for (const RomRecord &r : previous) {
                     if (r.system == s.id && offlineRoots.contains(r.root)) {
                         records.append(r);
@@ -330,6 +332,7 @@ Library::Library(const Config &config, ProfileService *profiles, Launcher *launc
             refreshModels();
             if (wasRestricted != m_allow.restricted)
                 emit restrictedChanged();
+            emit allowListChanged();
             notifyChanged();
         });
     if (scraper) {
@@ -534,6 +537,7 @@ void Library::startScan(int kinds, bool reloadRegistry)
     input.home = m_config.home;
     input.cachePath = m_config.cachePath;
     if (input.scanRoms) {
+        input.forgetOffline = std::exchange(m_pendingForget, false);
         if (!m_cacheBase.isEmpty()) {
             input.cacheBase = std::exchange(m_cacheBase, {});   // the startup load: the first diff base
             input.haveCacheBase = true;
@@ -641,6 +645,10 @@ void Library::loadProfileFiles()
                 if (Ids::isValidItemKey(v.toString()) && m_allow.games.size() < 10000)
                     m_allow.games.insert(v.toString());
             }
+            for (const QJsonValue &v : root->value(QStringLiteral("apps")).toArray()) {
+                if (Ids::isValidItemKey(v.toString()) && m_allow.apps.size() < 10000)
+                    m_allow.apps.insert(Moonlight::canonicalKey(v.toString()));
+            }
         }
     }
     const auto overrides = JsonFile::read(profileFile(QStringLiteral("emulators.json")), kMaxProfileFileBytes);
@@ -688,6 +696,35 @@ bool Library::systemAllowed(const QString &systemId) const
             return true;
     }
     return false;
+}
+
+bool Library::itemAllowed(const QString &key) const
+{
+    // Each Moonlight app must be named: a host entry is no wildcard (it
+    // would cover "Desktop" / "Steam Big Picture", i.e. the whole host PC).
+    return !m_allow.restricted || m_allow.apps.contains(Moonlight::canonicalKey(key));
+}
+
+int Library::missingCount() const
+{
+    int n = 0;
+    for (const QList<Game> &list : m_games) {
+        for (const Game &g : list)
+            n += g.offline ? 1 : 0;
+    }
+    return n;
+}
+
+int Library::forgetMissing()
+{
+    const int n = missingCount();
+    if (m_config.mock || n == 0)
+        return 0;
+    m_pendingForget = true;
+    m_rescanTimer.stop();
+    m_timerKinds = 0;
+    startScan(FullScan | SteamScan, true);
+    return n;
 }
 
 bool Library::gameAllowed(const Game &game) const

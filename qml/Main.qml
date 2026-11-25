@@ -14,8 +14,17 @@ import MightyOS.Core
 // Guide (Guide button, Ctrl+Home, the remote's Home/Root Menu) answers
 // an open dialog or menu with its safe default (as Back does) and returns
 // to Home > Favorites. Held while an app runs it becomes
-// InputRouter.guideHeld, for the Guide overlay of M6; until then it is
-// logged and mentioned in a toast once the app has exited.
+// InputRouter.guideHeld:
+//  - a Steam launch (tracked): stop waiting for / tracking the game,
+//  - a web app (kiosk browser) or Moonlight stream: close it
+//    (Launcher.terminate(): SIGTERM to its process group, SIGKILL 3 s
+//    later). These have no exit a gamepad or TV remote reaches and no
+//    unsaved state. The TV remote (lower trust, PLAN D18/D25) may only do
+//    it in "full" mode and with two Home presses within 1.5 s (the first
+//    arms it: "Press Home again to close"); in "navigation only" mode it
+//    can't close apps at all,
+//  - anything else: logged and mentioned in a toast after the app exits
+//    (the Guide overlay of M6).
 //
 // Profiles: with exactly one profile MightyOS goes straight to Home; with
 // 2+ the picker is shown first, the last used profile preselected.
@@ -37,6 +46,11 @@ Window {
     property string launchTitle
     property string launchIcon
     property bool launchStarted: false
+    // The running launch closes on Guide held (web apps, streams).
+    property bool launchClosable: false
+    property bool launchClosedByGuide: false
+    // The TV remote's first Home press on a closable launch (S2).
+    property bool remoteCloseArmed: false
 
     readonly property bool modalOpen: dialog.open || contextMenu.open || picker.open
     // Guide was held during the current launch (no overlay before M6).
@@ -146,6 +160,15 @@ Window {
         if (Launcher.running)
             return   // never clobber the running app's launch state
         const isApp = item.kind === "app"
+        const isMedia = item.kind === "webapp" || item.kind === "stream"
+        if (item.kind === "stream" && !Media.ready) {
+            toast.show(qsTr("Still looking for Moonlight hosts, try %1 again in a moment").arg(item.title), false)
+            return
+        }
+        if (isApp && !Library.itemAllowed(item.key)) {
+            toast.show(qsTr("Ask a parent: this isn't available in a kids profile"), false)
+            return
+        }
         const argv = isApp ? AppRegistry.command(item.key) : launchCommand
         if (isApp && (!argv || argv.length === 0)) {
             if (!AppRegistry.ready)
@@ -160,7 +183,18 @@ Window {
         launchIcon = item.icon
         launchStarted = false
         guideHeldWhileRunning = false
+        launchClosable = isMedia
+        launchClosedByGuide = false
         navStack.persistNow()
+        if (isMedia) {
+            // Media builds the kiosk-browser / Moonlight argv and calls Launcher.
+            const started = Media.launch(item.key)
+            if (!started.attempted) {
+                _returnFromLaunch()
+                toast.show(started.message, true)
+            }
+            return
+        }
         if (isApp || argv.length > 0) {
             Launcher.launch(item.key, argv)
             return
@@ -226,6 +260,8 @@ Window {
     }
 
     function _returnFromLaunch() {
+        launchClosable = false
+        remoteCloseArmed = false
         if (launchScreen && launchScreen === navStack.current && launchState)
             launchScreen.restoreState(launchState)
         launchScreen = null
@@ -243,6 +279,21 @@ Window {
             // the game was seen or not (the heuristics can be wrong).
             if (Launcher.tracked) {
                 Launcher.stopTracking()
+                return
+            }
+            if (Launcher.running && window.launchClosable) {
+                if (source === InputRouter.Remote) {
+                    if (Settings.tvRemote !== "full")
+                        return   // navigation only: the remote can't close apps
+                    if (!window.remoteCloseArmed) {
+                        window.remoteCloseArmed = true
+                        remoteCloseTimer.restart()
+                        return
+                    }
+                }
+                remoteCloseTimer.stop()
+                window.remoteCloseArmed = false
+                window.launchClosedByGuide = Launcher.terminate()
                 return
             }
             if (Launcher.running)
@@ -275,8 +326,12 @@ Window {
             window.requestActivate()
             clock.refresh()
             const guideHeld = window.guideHeldWhileRunning
+            const closed = window.launchClosedByGuide
             window.guideHeldWhileRunning = false
-            if (exitCode === -1)
+            window.launchClosedByGuide = false
+            if (closed)
+                toast.show(qsTr("Closed %1").arg(window.launchTitle), false)
+            else if (exitCode === -1)
                 toast.show(qsTr("%1 crashed").arg(window.launchTitle), true)
             else if (exitCode !== 0)
                 toast.show(qsTr("%1 exited with code %2").arg(window.launchTitle).arg(exitCode), true)
@@ -289,6 +344,12 @@ Window {
             window._returnFromLaunch()
             toast.show(qsTr("Could not launch %1: %2").arg(window.launchTitle || id).arg(error), true)
         }
+    }
+
+    Timer {
+        id: remoteCloseTimer
+        interval: 1500
+        onTriggered: window.remoteCloseArmed = false
     }
 
     // (f) The minute timer may be far off after suspend or a long game.
@@ -312,6 +373,9 @@ Window {
     Component { id: categoryScreen; CategoryScreen {} }
     Component { id: appListScreen; AppListScreen {} }
     Component { id: artworkScreen; ArtworkScreen {} }
+    Component { id: mediaScreen; MediaScreen {} }
+    Component { id: moonlightScreen; MoonlightScreen {} }
+    Component { id: mediaSettingsScreen; MediaSettingsScreen {} }
 
     Item {
         id: inputRoot
@@ -400,7 +464,10 @@ Window {
                     games: gameGridScreen,
                     category: categoryScreen,
                     apps: appListScreen,
-                    artwork: artworkScreen
+                    artwork: artworkScreen,
+                    media: mediaScreen,
+                    moonlight: moonlightScreen,
+                    mediasettings: mediaSettingsScreen
                 })
                 visible: !picker.open
                 focusShown: !window.modalOpen && !Launcher.running
@@ -483,6 +550,8 @@ Window {
             launching: !window.launchStarted
             waiting: Launcher.waiting
             tracked: Launcher.tracked
+            closable: window.launchClosable
+            remoteCloseArmed: window.remoteCloseArmed
             title: window.launchTitle
             iconName: window.launchIcon
         }

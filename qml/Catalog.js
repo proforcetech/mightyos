@@ -20,7 +20,7 @@ const categories = [
       open: { screen: "systems", params: { category: "games" } } },
     { key: "media", title: qsTr("Media"), icon: "media", tint: "#4da3ff",
       blurb: qsTr("Movies, music and streaming"),
-      open: { screen: "category", params: { category: "media" } } },
+      open: { screen: "media", params: {} } },
     { key: "store", title: qsTr("App Store"), icon: "store", tint: "#b48cff",
       blurb: qsTr("Install apps from Flathub"),
       open: { screen: "category", params: { category: "store" } } },
@@ -40,6 +40,7 @@ const sections = {
     settings: [
         { key: "settings:profiles",    title: qsTr("Profiles"),    icon: "profile",   tint: "#ffc94d", kind: "profiles" },
         { key: "settings:apps",        title: qsTr("All apps"),    icon: "apps",      tint: "#4da3ff", kind: "allapps" },
+        { key: "settings:media",       title: qsTr("Media"),       icon: "media",     tint: "#4da3ff", kind: "mediasettings" },
         { key: "settings:display",     title: qsTr("Display"),     icon: "display",   tint: "#a0aec0" },
         { key: "settings:audio",       title: qsTr("Audio"),       icon: "audio",     tint: "#a0aec0" },
         { key: "settings:network",     title: qsTr("Network"),     icon: "network",   tint: "#a0aec0" },

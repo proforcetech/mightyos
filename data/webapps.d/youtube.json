@@ -1,0 +1,36 @@
+{
+    "version": 1,
+    "id": "youtube",
+    "label": "YouTube",
+    "subtitle": "YouTube's TV interface",
+    "url": "https://www.youtube.com/tv",
+    "hosts": [
+        "www.youtube.com",
+        "youtube.com"
+    ],
+    "icon": "tv",
+    "tint": "#ff0033",
+    "order": 10,
+    "browser": "auto",
+    "drm": false,
+    "userAgent": "Mozilla/5.0 (SMART-TV; Linux; Tizen 6.0) AppleWebKit/537.36 (KHTML, like Gecko) 85.0.4183.93/6.0 TV Safari/537.36",
+    "kidsHosts": [
+        "*.googlevideo.com",
+        "*.ytimg.com",
+        "*.ggpht.com",
+        "*.gstatic.com",
+        "fonts.googleapis.com",
+        "accounts.google.com",
+        "accounts.youtube.com",
+        "*.googleusercontent.com",
+        "jnn-pa.googleapis.com"
+    ],
+    "kidsMap": {
+        "www.youtube.com": "restrict.youtube.com",
+        "m.youtube.com": "restrict.youtube.com",
+        "youtubei.googleapis.com": "restrict.youtube.com",
+        "youtube.googleapis.com": "restrict.youtube.com",
+        "www.youtube-nocookie.com": "restrict.youtube.com"
+    },
+    "comment": "youtube.com/tv only serves the TV (leanback) interface to TV user agents; desktop browsers get redirected to the normal site. kidsHosts: CDNs a kids profile may reach (best effort, verify by hand)."
+}

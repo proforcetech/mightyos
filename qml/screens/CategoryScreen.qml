@@ -3,22 +3,21 @@ import MightyOS.Core
 import MightyOS.UI
 import "../Catalog.js" as Catalog
 
-// One TileRow for Media / App Store / Settings. Media lists the media apps
-// AppRegistry found (.desktop files and manifests); App Store and Settings
-// are placeholders until M7 / M8, except Settings > Profiles (the profile
-// picker) and Settings > All apps.
+// One TileRow for App Store / Settings: placeholders until M7 / M8, except
+// Settings > Profiles (the profile picker), All apps, Media and Artwork.
+// (Media has its own MediaScreen since M5; an old saved path to
+// category/media is refused and the stack falls back to Home.)
 //
-// params: { category: "media" | "store" | "settings" }
+// params: { category: "store" | "settings" }
 NavScreen {
     id: categoryScreen
 
     readonly property var _category: Catalog.category(params.category ?? "")
-    readonly property var _milestone: ({ media: "M5", store: "M7", settings: "M8" })
-    readonly property bool _isMedia: params.category === "media"
+    readonly property var _milestone: ({ store: "M7", settings: "M8" })
 
     title: _category ? _category.title : ""
     valid: _category !== null && _milestone[params.category] !== undefined
-           && !(Library.restricted && params.category !== "media")   // kids: no store / settings
+           && !Library.restricted   // kids: no store / settings
 
     prompts: {
         const list = [
@@ -64,9 +63,8 @@ NavScreen {
     Component.onCompleted: {
         if (!valid)
             return
-        if (!_isMedia)
-            sectionModel.setRows(Catalog.sectionRows(params.category))
-        row.model = _isMedia ? AppRegistry.media : sectionModel
+        sectionModel.setRows(Catalog.sectionRows(params.category))
+        row.model = sectionModel
         row.currentIndex = 0
         _updateFocused()
     }
@@ -78,17 +76,8 @@ NavScreen {
         InfoHeader {
             width: parent.width
             heading: categoryScreen.focusedItem ? categoryScreen.focusedItem.title : categoryScreen.title
-            detail: {
-                if (categoryScreen._isMedia) {
-                    if (row.count === 0)
-                        return qsTr("No media apps found. Kodi, Jellyfin, Plex and friends show up here once installed.")
-                    return categoryScreen.focusedItem && categoryScreen.focusedItem.subtitle.length > 0
-                        ? categoryScreen.focusedItem.subtitle
-                        : qsTr("Installed media apps. Streaming and web-app tiles arrive in M5.")
-                }
-                return qsTr("Placeholder. The full %1 screen arrives in %2.")
+            detail: qsTr("Placeholder. The full %1 screen arrives in %2.")
                     .arg(categoryScreen.title).arg(categoryScreen._milestone[categoryScreen.params.category] ?? "")
-            }
         }
 
         Item {
@@ -99,7 +88,6 @@ NavScreen {
                 id: row
                 anchors.verticalCenter: parent.verticalCenter
                 active: categoryScreen.focusShown
-                keepPendingKey: categoryScreen._isMedia
                 onCurrentDataChanged: categoryScreen._updateFocused()
                 onCurrentIndexChanged: {
                     categoryScreen._updateFocused()

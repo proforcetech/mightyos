@@ -5,6 +5,7 @@
 #include "itemresolver.h"
 #include "jsonfile.h"
 #include "library.h"
+#include "medialibrary.h"
 #include "profileservice.h"
 
 #include <QJsonArray>
@@ -21,6 +22,10 @@ QString kindForKey(const QString &key)
 {
     if (key.startsWith(QLatin1String("rom:")) || key.startsWith(QLatin1String("steam:")))
         return QStringLiteral("game");
+    if (key.startsWith(QLatin1String("webapp:")))
+        return QStringLiteral("webapp");
+    if (key.startsWith(QLatin1String("moonlight:")))
+        return key.indexOf(QLatin1Char('/')) > 0 ? QStringLiteral("stream") : QStringLiteral("streamhost");
     if (key.contains(QLatin1Char(':')))
         return QStringLiteral("app");
     return QStringLiteral("system");
@@ -32,6 +37,10 @@ QString iconForKind(const QString &kind)
         return QStringLiteral("games");
     if (kind == QLatin1String("app"))
         return QStringLiteral("apps");
+    if (kind == QLatin1String("webapp"))
+        return QStringLiteral("tv");
+    if (kind == QLatin1String("stream") || kind == QLatin1String("streamhost"))
+        return QStringLiteral("stream");
     return QStringLiteral("emulators");
 }
 
@@ -39,11 +48,14 @@ QString iconForKind(const QString &kind)
 
 // ---------------------------------------------------------------------------
 
-CatalogResolver::CatalogResolver(Library *library, AppRegistry *registry, QObject *parent)
+CatalogResolver::CatalogResolver(Library *library, AppRegistry *registry, MediaLibrary *media, QObject *parent)
     : ItemResolver(parent)
     , m_library(library)
     , m_registry(registry)
+    , m_media(media)
 {
+    if (media)
+        connect(media, &MediaLibrary::changed, this, &ItemResolver::changed);
     if (library)
         connect(library, &Library::changed, this, &ItemResolver::changed);
     if (registry) {
@@ -56,6 +68,8 @@ bool CatalogResolver::isPending(const QString &key) const
 {
     if (m_library && m_library->isPending(key))
         return true;   // ROMs before the cache loaded, Steam before the first scan
+    if (m_media && m_media->isPending(key))
+        return true;   // Moonlight before its settings were read
     return m_registry && !m_registry->isReady()
            && (key.startsWith(QLatin1String("app:")) || key.startsWith(QLatin1String("flatpak:"))
                || key.startsWith(QLatin1String("desktop:")));
@@ -65,8 +79,10 @@ std::optional<TileItem> CatalogResolver::resolve(const QString &key) const
 {
     if (m_registry) {
         if (auto app = m_registry->resolve(key))
-            return app;
+            return (!m_library || m_library->itemAllowed(key)) ? app : std::nullopt;
     }
+    if (m_media && (key.startsWith(QLatin1String("webapp:")) || key.startsWith(QLatin1String("moonlight:"))))
+        return m_media->resolve(key);
     if (m_library)
         return m_library->resolve(key);
     return std::nullopt;
@@ -91,7 +107,8 @@ Favorites *Favorites::create(QQmlEngine *qmlEngine, QJSEngine *)
     auto *profiles = qmlEngine->singletonInstance<ProfileService *>("MightyOS.Core", "ProfileService");
     auto *library = qmlEngine->singletonInstance<Library *>("MightyOS.Core", "Library");
     auto *registry = qmlEngine->singletonInstance<AppRegistry *>("MightyOS.Core", "AppRegistry");
-    auto *resolver = new CatalogResolver(library, registry);
+    auto *media = qmlEngine->singletonInstance<MediaLibrary *>("MightyOS.Core", "Media");
+    auto *resolver = new CatalogResolver(library, registry, media);
     auto *favorites = new Favorites(profiles, resolver);
     resolver->setParent(favorites);
     return favorites;
@@ -169,7 +186,9 @@ TileItem Favorites::tileFor(const QString &key) const
     if (m_resolver && m_resolver->isPending(key)) {
         // Apps not scanned yet: not "Unavailable", just not here yet.
         item.subtitle = key.startsWith(QLatin1String("rom:")) || key.startsWith(QLatin1String("steam:"))
-            ? tr("Looking for games…") : tr("Looking for apps…");
+            ? tr("Looking for games…")
+            : key.startsWith(QLatin1String("moonlight:")) ? tr("Looking for Moonlight hosts…")
+                                                          : tr("Looking for apps…");
         item.available = true;
         return item;
     }

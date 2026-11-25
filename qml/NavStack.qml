@@ -214,7 +214,7 @@ Item {
         _restoring = false
         // Write back the cleaned-up path, but not before the first app and
         // library scans: those positions may only be pending, not gone.
-        if (AppRegistry.ready && Library.scanned)
+        if (AppRegistry.ready && Library.scanned && Media.ready)
             persist()
     }
 

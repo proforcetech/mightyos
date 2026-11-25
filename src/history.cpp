@@ -1,5 +1,7 @@
 #include "history.h"
 
+#include "medialibrary.h"
+
 #include "appregistry.h"
 #include "ids.h"
 #include "itemresolver.h"
@@ -31,7 +33,8 @@ History *History::create(QQmlEngine *qmlEngine, QJSEngine *)
     auto *profiles = qmlEngine->singletonInstance<ProfileService *>("MightyOS.Core", "ProfileService");
     auto *library = qmlEngine->singletonInstance<Library *>("MightyOS.Core", "Library");
     auto *registry = qmlEngine->singletonInstance<AppRegistry *>("MightyOS.Core", "AppRegistry");
-    auto *resolver = new CatalogResolver(library, registry);
+    auto *media = qmlEngine->singletonInstance<MediaLibrary *>("MightyOS.Core", "Media");
+    auto *resolver = new CatalogResolver(library, registry, media);
     auto *history = new History(profiles, resolver);
     resolver->setParent(history);
     return history;

@@ -1,13 +1,17 @@
 #include "jsonfile.h"
 
+#include "ids.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QList>
 #include <QJsonDocument>
 #include <QRandomGenerator>
 #include <QSaveFile>
 
 #include <cerrno>
+#include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -186,3 +190,90 @@ bool write(const QString &path, const QJsonObject &object)
 }
 
 } // namespace JsonFile
+
+namespace {
+
+bool removeEntries(int dirfd, int depth)
+{
+    if (depth > 64)
+        return false;
+    const int fd = ::dup(dirfd);
+    if (fd < 0)
+        return false;
+    DIR *dir = ::fdopendir(fd);
+    if (!dir) {
+        ::close(fd);
+        return false;
+    }
+    QList<QByteArray> names;
+    while (const dirent *entry = ::readdir(dir)) {
+        const QByteArray name(entry->d_name);
+        if (name != "." && name != "..")
+            names.append(name);
+    }
+    ::closedir(dir);
+    bool ok = true;
+    for (const QByteArray &name : std::as_const(names)) {
+        struct stat st {};
+        if (::fstatat(dirfd, name.constData(), &st, AT_SYMLINK_NOFOLLOW) != 0) {
+            ok = ok && errno == ENOENT;
+            continue;
+        }
+        if (S_ISDIR(st.st_mode)) {
+            const int sub = ::openat(dirfd, name.constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+            if (sub < 0) {
+                ok = false;
+                continue;
+            }
+            ok = removeEntries(sub, depth + 1) && ok;
+            ::close(sub);
+            ok = (::unlinkat(dirfd, name.constData(), AT_REMOVEDIR) == 0 || errno == ENOENT) && ok;
+        } else {
+            ok = (::unlinkat(dirfd, name.constData(), 0) == 0 || errno == ENOENT) && ok;
+        }
+    }
+    return ok;
+}
+
+} // namespace
+
+bool JsonFile::removeTreeNoFollow(const QString &base, const QStringList &subdirs, const QString &name)
+{
+    auto validPart = [](const QString &part) {
+        return !part.isEmpty() && part != QLatin1String(".") && part != QLatin1String("..")
+               && !part.contains(QLatin1Char('/')) && !part.contains(QChar(0));
+    };
+    if (!Ids::isCleanAbsolutePath(base) || !validPart(name))
+        return false;
+    int fd = ::open(QFile::encodeName(base).constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (fd < 0)
+        return errno == ENOENT;
+    for (const QString &part : subdirs) {
+        if (!validPart(part)) {
+            ::close(fd);
+            return false;
+        }
+        const int next = ::openat(fd, QFile::encodeName(part).constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+        const int err = errno;
+        ::close(fd);
+        if (next < 0)
+            return err == ENOENT;   // nothing there (a symlink on the way: ELOOP/ENOTDIR, refused)
+        fd = next;
+    }
+    const QByteArray leaf = QFile::encodeName(name);
+    struct stat st {};
+    bool ok = true;
+    if (::fstatat(fd, leaf.constData(), &st, AT_SYMLINK_NOFOLLOW) != 0) {
+        ok = errno == ENOENT;
+    } else if (S_ISDIR(st.st_mode)) {
+        const int sub = ::openat(fd, leaf.constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+        ok = sub >= 0 && removeEntries(sub, 1);
+        if (sub >= 0)
+            ::close(sub);
+        ok = ok && ::unlinkat(fd, leaf.constData(), AT_REMOVEDIR) == 0;
+    } else {
+        ok = ::unlinkat(fd, leaf.constData(), 0) == 0;
+    }
+    ::close(fd);
+    return ok;
+}

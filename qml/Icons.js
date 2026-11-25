@@ -107,6 +107,26 @@ const table = {
         d: "M14 2 A10 10 0 1 0 22 14 A8 8 0 1 1 14 2 Z",
         oddEven: false
     },
+    "tv": {          // TV screen with a stand, play symbol cut out
+        d: "M3 4 H21 A1 1 0 0 1 22 5 V17 A1 1 0 0 1 21 18 H3 A1 1 0 0 1 2 17 V5 A1 1 0 0 1 3 4 Z "
+         + "M10 8 L15 11 L10 14 Z M8 20 H16 V22 H8 Z",
+        oddEven: true
+    },
+    "stream": {      // monitor with a signal arc (game streaming)
+        d: "M2 5 H22 V17 H2 Z M4 7 V15 H20 V7 Z M9 19 H15 V21 H9 Z "
+         + "M10 13 A2 2 0 1 1 14 13 Z",
+        oddEven: true
+    },
+    "web": {         // globe
+        d: "M2 12 A10 10 0 1 0 22 12 A10 10 0 1 0 2 12 Z "
+         + "M4.1 11 H8 A15 15 0 0 1 11 4.1 A8 8 0 0 0 4.1 11 Z "
+         + "M10 11 H14 A13 13 0 0 0 12 4.5 A13 13 0 0 0 10 11 Z "
+         + "M16 11 H19.9 A8 8 0 0 0 13 4.1 A15 15 0 0 1 16 11 Z "
+         + "M4.1 13 A8 8 0 0 0 11 19.9 A15 15 0 0 1 8 13 Z "
+         + "M10 13 A13 13 0 0 0 12 19.5 A13 13 0 0 0 14 13 Z "
+         + "M16 13 A15 15 0 0 1 13 19.9 A8 8 0 0 0 19.9 13 Z",
+        oddEven: true
+    },
     "apps": {        // 2x2 grid of tiles
         d: "M4 4 H10 V10 H4 Z M14 4 H20 V10 H14 Z M4 14 H10 V20 H4 Z M14 14 H20 V20 H14 Z",
         oddEven: false

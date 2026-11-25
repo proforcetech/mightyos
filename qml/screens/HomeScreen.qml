@@ -19,7 +19,8 @@ import "../Catalog.js" as Catalog
 // (extra.positions).
 //
 // Content models are the C++ ones: Favorites.model, Library.systems(),
-// AppRegistry.media, static TileListModels for Store/Settings.
+// Media.home (media apps, web apps, Moonlight hosts), static TileListModels
+// for Store/Settings.
 NavScreen {
     id: home
 
@@ -48,8 +49,9 @@ NavScreen {
         if (_category) {
             if (_category.key === "favorites" && Favorites.count === 0)
                 return qsTr("Press X (Insert) on any game, app or system to pin it here")
-            if (_category.key === "media" && AppRegistry.media.count === 0)
-                return qsTr("No media apps installed yet")
+            if (_category.key === "media" && Media.home.count === 0)
+                return Library.restricted ? qsTr("Nothing is allowed for this profile yet. Ask a parent.")
+                                          : qsTr("No media apps or streaming tiles yet")
             return _category.blurb
         }
         if (!focusedItem)
@@ -244,7 +246,7 @@ NavScreen {
         case "favorites": return Favorites.model
         case "emulators":
         case "games":     return Library.systems(id)
-        case "media":     return AppRegistry.media
+        case "media":     return Media.home
         case "store":     return storeModel
         case "settings":  return settingsModel
         }
@@ -318,8 +320,8 @@ NavScreen {
                 id: content
                 objectName: "homeContent"
                 keepPendingKey: home._shownCategory !== "store" && home._shownCategory !== "settings"
-                sourceReady: home._shownCategory === "media" ? AppRegistry.ready
-                           : home._shownCategory === "favorites" ? AppRegistry.ready && Library.scanned
+                sourceReady: home._shownCategory === "media" ? AppRegistry.ready && Media.ready
+                           : home._shownCategory === "favorites" ? AppRegistry.ready && Library.scanned && Media.ready
                            : Library.scanned
                 anchors.verticalCenter: parent.verticalCenter
                 active: home.focusShown && home.focusRow === 1
@@ -361,7 +363,7 @@ NavScreen {
                 id: recent
                 objectName: "homeRecent"
                 keepPendingKey: true
-                sourceReady: AppRegistry.ready && Library.scanned
+                sourceReady: AppRegistry.ready && Library.scanned && Media.ready
                 anchors.verticalCenter: parent.verticalCenter
                 model: History.recent
                 tileWidth: Theme.recentTileSize

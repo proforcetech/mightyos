@@ -114,11 +114,12 @@ Item {
             return false
         if (row.kind === "category")
             return row.key === "store" || row.key === "settings"
-        return ["profiles", "allapps", "controllers", "power", "artwork", "section"].indexOf(row.kind) >= 0
+        return ["profiles", "allapps", "controllers", "power", "artwork", "section", "mediasettings",
+                "getapp", "addwebapp", "managewebapp"].indexOf(row.kind) >= 0
     }
 
     function canFavorite(row: var): bool {
-        return !!row && (row.kind === "game" || row.kind === "app" || row.kind === "system")
+        return !!row && ["game", "app", "system", "webapp", "stream", "streamhost"].indexOf(row.kind) >= 0
     }
 
     function acceptLabel(row: var): string {
@@ -126,8 +127,10 @@ Item {
             return qsTr("Select")
         if (row.available === false)
             return qsTr("Remove")
-        return row.kind === "game" ? qsTr("Play")
-             : row.kind === "app" ? qsTr("Launch")
+        return row.kind === "game" || row.kind === "stream" ? qsTr("Play")
+             : row.kind === "app" || row.kind === "webapp" ? qsTr("Launch")
+             : row.kind === "getapp" ? qsTr("Get")
+             : row.kind === "addwebapp" ? qsTr("Add")
              : row.kind === "showall" ? qsTr("Show")
              : qsTr("Open")
     }
@@ -164,7 +167,18 @@ Item {
             break
         case "game":
         case "app":
+        case "webapp":
+        case "stream":
             launchRequested({ key: row.key, title: row.title, icon: row.icon, kind: row.kind })
+            break
+        case "streamhost":
+            openRequested("moonlight", { host: row.key })
+            break
+        case "mediasettings":
+            openRequested("mediasettings", {})
+            break
+        case "getapp":
+            _showGetApp(row)
             break
         case "profiles":
             profilePickerRequested()
@@ -280,7 +294,7 @@ Item {
     function optionsFor(): var {
         const row = focusedRow()
         if (!row)
-            return []
+            return extraOptions()   // e.g. "Look for apps again" on an empty screen
         const items = []
         if (row.available !== false)
             items.push({ id: "activate", label: acceptLabel(row) })
@@ -307,6 +321,9 @@ Item {
                 items.push({ id: "emulator", label: qsTr("Default emulator…") })
             if (!Library.mock)
                 items.push({ id: "scan", label: qsTr("Scan for games") })
+            if (!Library.mock && !Library.restricted && Library.missingCount > 0)
+                items.push({ id: "forgetMissing", label: qsTr("Forget missing games (%1)").arg(Library.missingCount),
+                             destructive: true })
             if (!Library.mock && !Library.restricted)
                 items.push({ id: "showAll", label: Settings.showAllSystems ? qsTr("Hide systems without games")
                                                                            : qsTr("Show all systems") })
@@ -331,6 +348,9 @@ Item {
             Library.rescan()
             toastRequested(qsTr("Scanning for games…"), false)
             break
+        case "forgetMissing":
+            _confirmForgetMissing()
+            break
         case "showAll":
             Settings.showAllSystems = !Settings.showAllSystems
             break
@@ -339,6 +359,39 @@ Item {
                 _setEmulator(row, id.slice(4))
             break
         }
+    }
+
+    // Games whose ROM folder is gone ("Not connected"): drop them from the
+    // grids and the cache after a confirmation (Keep is the default). An
+    // unplugged drive's games come back with the next scan once it's back.
+    function _confirmForgetMissing() {
+        const count = Library.missingCount
+        dialogRequested({
+            title: qsTr("Forget %n missing games?", "", count),
+            message: qsTr("Their folders or drive can't be found. Forget them only if you deleted them on purpose: "
+                          + "games on a drive that is just unplugged come back when it is connected and scanned again."),
+            acceptsRemote: false,
+            buttons: [
+                { id: "keep", label: qsTr("Keep") },
+                { id: "forget", label: qsTr("Forget"), destructive: true }
+            ],
+            onFinished: (id) => {
+                if (id === "forget" && Library.forgetMissing() > 0)
+                    screen.toastRequested(qsTr("Forgetting %n missing games…", "", count), false)
+            }
+        })
+    }
+
+    // A well-known media app that isn't installed. No auto-install: the
+    // App Store arrives in M7; until then the Flatpak command is shown.
+    function _showGetApp(row: var) {
+        const appId = String(row.key).slice("getapp:".length)
+        dialogRequested({
+            title: qsTr("Get %1").arg(row.title),
+            message: qsTr("%1 isn't installed. The App Store arrives in M7; until then install it on this PC with:")
+                         .arg(row.title) + "\nflatpak install --user flathub " + appId,
+            buttons: [{ id: "close", label: qsTr("Close") }]
+        })
     }
 
     // Per-profile emulator for a game or (on a system tile) its default.

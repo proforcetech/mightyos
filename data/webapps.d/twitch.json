@@ -1,0 +1,23 @@
+{
+    "version": 1,
+    "id": "twitch",
+    "label": "Twitch",
+    "url": "https://www.twitch.tv/",
+    "hosts": [
+        "www.twitch.tv",
+        "twitch.tv"
+    ],
+    "icon": "tv",
+    "tint": "#9146ff",
+    "order": 50,
+    "browser": "auto",
+    "drm": false,
+    "kidsHosts": [
+        "*.twitch.tv",
+        "*.ttvnw.net",
+        "*.jtvnw.net",
+        "*.twitchcdn.net",
+        "*.twitchsvc.net"
+    ],
+    "comment": "kidsHosts: CDNs a kids profile may reach (best effort, verify by hand)."
+}

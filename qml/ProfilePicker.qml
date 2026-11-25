@@ -105,9 +105,11 @@ Item {
             acceptsRemote: false,
             title: qsTr("Delete %1?").arg(name),
             message: saves
-                ? qsTr("Its favorites, history and saved position are deleted. Its game saves stay in %1 "
-                       + "unless you choose Delete with saves. This can't be undone.").arg(ProfileService.savesLocation(id))
-                : qsTr("Its favorites, history and saved position are deleted too. This can't be undone."),
+                ? qsTr("Its favorites, history, saved position and streaming logins (browser data) are deleted. "
+                       + "Its game saves stay in %1 unless you choose Delete with saves. This can't be undone.")
+                      .arg(ProfileService.savesLocation(id))
+                : qsTr("Its favorites, history, saved position and streaming logins (browser data) are deleted too. "
+                       + "This can't be undone."),
             buttons: buttons,
             onFinished: (answer) => {
                 if (answer !== "delete" && answer !== "deleteAll")

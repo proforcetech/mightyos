@@ -1,6 +1,8 @@
 #include "profileservice.h"
 
 #include "ids.h"
+#include "jsonfile.h"
+#include "webapps.h"
 
 #include <QDir>
 #include <QFile>
@@ -503,6 +505,15 @@ bool ProfileService::remove(const QString &id, bool keepSaves)
     if (!m_home.isEmpty()) {
         // Generated Flatpak RetroArch config (not a save).
         removeTree(m_home + QStringLiteral("/.var/app/org.libretro.RetroArch/config/mightyos/profiles/") + id);
+    }
+    // Browser data (streaming logins) goes with the profile, saves kept or
+    // not. The Flatpak dirs are inside sandbox-writable trees: no-follow walk.
+    if (!m_dataDir.isEmpty())
+        JsonFile::removeTreeNoFollow(m_dataDir, { QStringLiteral("profiles"), id }, QStringLiteral("browsers"));
+    if (!m_home.isEmpty()) {
+        for (const BrowserDef &browser : WebAppLaunch::browsers())
+            JsonFile::removeTreeNoFollow(m_home + QStringLiteral("/.var/app/") + browser.flatpakId,
+                                         { QStringLiteral("data"), QStringLiteral("mightyos"), QStringLiteral("profiles") }, id);
     }
     if (!keepSaves) {
         for (const QString &dir : savesDirs(id))

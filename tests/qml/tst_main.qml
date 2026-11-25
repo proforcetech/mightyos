@@ -132,7 +132,7 @@ Item {
             for (let i = 0; i < 5; ++i)
                 act(InputRouter.NextCategory)
             act(InputRouter.Navigate, "down")
-            for (let i = 0; i < 8; ++i)
+            for (let i = 0; i < 9; ++i)
                 act(InputRouter.Navigate, "right")
             compare(stack.current.saveState().key, "settings:power")
             const spy = createTemporaryObject(spyComponent, root, { target: dialog, signalName: "finished" })
@@ -214,7 +214,7 @@ Item {
             for (let i = 0; i < 5; ++i)
                 act(InputRouter.NextCategory)            // Settings
             act(InputRouter.Navigate, "down")
-            for (let i = 0; i < 5; ++i)
+            for (let i = 0; i < 6; ++i)
                 act(InputRouter.Navigate, "right")
             compare(homeState().key, "settings:controllers")
             verify(act(InputRouter.Accept))
@@ -278,7 +278,7 @@ Item {
             // Settings > Power: the remote may open it, but only cancel it.
             for (let i = 0; i < 4; ++i)
                 act(InputRouter.NextCategory)
-            for (let i = 0; i < 8; ++i)
+            for (let i = 0; i < 9; ++i)
                 act(InputRouter.Navigate, "right")
             compare(homeState().key, "settings:power")
             verify(InputRouter.dispatch(InputRouter.Accept, "", InputRouter.Remote))

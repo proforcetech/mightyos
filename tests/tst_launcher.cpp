@@ -1,8 +1,14 @@
 #include "envguard.h"
 #include "launcher.h"
 
+#include <QElapsedTimer>
+#include <QFile>
+#include <QFileInfo>
+#include <QTemporaryDir>
 #include <QSignalSpy>
 #include <QTest>
+
+#include <csignal>
 
 class TestLauncher : public QObject
 {
@@ -19,7 +25,21 @@ private slots:
     void missingProgramFails();
     void secondLaunchWhileRunningFails();
     void emptyArgvFails();
+    void terminateEndsTheProcessGroup();
+    void terminateKillsWhatIgnoresSigterm();
+    void terminateReachesMembersOutlivingTheLeader();
+    void terminateRefusesTrackedLaunches();
 };
+
+namespace {
+// Never sees the app: the launch stays tracked until stopTracking().
+class IdleTracker : public LaunchTracker
+{
+public:
+    void start() override {}
+    bool seen() const override { return false; }
+};
+} // namespace
 
 static const QString kTestApp = QStringLiteral(MIGHTYOS_TESTAPP_PATH);
 
@@ -187,6 +207,92 @@ void TestLauncher::emptyArgvFails()
     QVERIFY(!launcher.launch(QStringLiteral("x"), {}));
     QVERIFY(!launcher.launch(QString(), { QStringLiteral("sh") }));
     QCOMPARE(failed.count(), 2);
+}
+
+
+void TestLauncher::terminateEndsTheProcessGroup()
+{
+    // Guide held on a web app / stream (M5): the whole group goes, and the
+    // end counts as a normal exit, not a crash.
+    Launcher launcher;
+    QVERIFY(!launcher.terminate());   // nothing runs
+    QSignalSpy launched(&launcher, &Launcher::launched);
+    QSignalSpy exited(&launcher, &Launcher::exited);
+    // A wrapper with a child in the same group, like flatpak run -> bwrap.
+    QVERIFY(launcher.launch(QStringLiteral("t"), { QStringLiteral("/bin/sh"), QStringLiteral("-c"),
+                                                   QStringLiteral("sleep 60 & wait") }));
+    QVERIFY(launched.wait(5000));
+    QTest::qWait(200);
+    QVERIFY(launcher.terminate());
+    QVERIFY(exited.wait(5000));
+    QCOMPARE(exited.at(0).at(0).toString(), QStringLiteral("t"));
+    QCOMPARE(exited.at(0).at(1).toInt(), 0);
+    QVERIFY(!launcher.isRunning());
+}
+
+void TestLauncher::terminateKillsWhatIgnoresSigterm()
+{
+    Launcher launcher;
+    QSignalSpy launched(&launcher, &Launcher::launched);
+    QSignalSpy exited(&launcher, &Launcher::exited);
+    QVERIFY(launcher.launch(QStringLiteral("stubborn"), { QStringLiteral("/bin/sh"), QStringLiteral("-c"),
+                                                          QStringLiteral("trap '' TERM; sleep 60") }));
+    QVERIFY(launched.wait(5000));
+    QTest::qWait(200);
+    QElapsedTimer timer;
+    timer.start();
+    QVERIFY(launcher.terminate());
+    QVERIFY(exited.wait(Launcher::kTerminateGraceMs + 4000));
+    QVERIFY2(timer.elapsed() >= Launcher::kTerminateGraceMs * 9 / 10, qPrintable(QString::number(timer.elapsed())));   // SIGKILL after the grace period
+    QCOMPARE(exited.at(0).at(1).toInt(), 0);
+}
+
+void TestLauncher::terminateReachesMembersOutlivingTheLeader()
+{
+    // M4 (review): the leader exits on SIGTERM, a child that ignores it is
+    // still in the group; the escalation is keyed by the pgid, not the
+    // (already finished) QProcess.
+    QTemporaryDir tmp;
+    const QString pidFile = tmp.path() + QStringLiteral("/child.pid");
+    Launcher launcher;
+    QSignalSpy launched(&launcher, &Launcher::launched);
+    QSignalSpy exited(&launcher, &Launcher::exited);
+    const QString script = QStringLiteral("sh -c 'trap \"\" TERM; echo $$ > %1; exec sleep 60' & wait").arg(pidFile);
+    QVERIFY(launcher.launch(QStringLiteral("wrapper"), { QStringLiteral("/bin/sh"), QStringLiteral("-c"), script }));
+    QVERIFY(launched.wait(5000));
+    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo(pidFile).size() > 0, 5000);
+    QFile f(pidFile);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    const pid_t child = static_cast<pid_t>(f.readAll().trimmed().toLongLong());
+    QVERIFY(child > 0);
+    QVERIFY(launcher.terminate());
+    QVERIFY(launcher.terminate());                      // second call: no-op
+    QVERIFY(exited.wait(2000));                         // the leader is gone at once
+    QCOMPARE(exited.count(), 1);
+    QCOMPARE(exited.at(0).at(1).toInt(), 0);
+    QCOMPARE(::kill(child, 0), 0);                      // the child ignored SIGTERM
+    // A new launch meanwhile doesn't cancel or receive the escalation.
+    QVERIFY(launcher.launch(QStringLiteral("next"), { QStringLiteral("/bin/sleep"), QStringLiteral("10") }));
+    QTRY_VERIFY_WITH_TIMEOUT(::kill(child, 0) != 0, Launcher::kTerminateGraceMs + 3000);
+    QVERIFY(launcher.isRunning());
+    QCOMPARE(launcher.currentId(), QStringLiteral("next"));
+    QVERIFY(launcher.terminate());
+    QTRY_VERIFY_WITH_TIMEOUT(!launcher.isRunning(), 5000);
+}
+
+void TestLauncher::terminateRefusesTrackedLaunches()
+{
+    // M3 (review): a tracked launch's process may be the Steam client.
+    Launcher launcher;
+    QSignalSpy launched(&launcher, &Launcher::launched);
+    QVERIFY(launcher.launch(QStringLiteral("steam:1"), { QStringLiteral("/bin/sleep"), QStringLiteral("10") },
+                            new IdleTracker));
+    QVERIFY(launched.wait(5000));
+    QVERIFY(launcher.isTracked());
+    QVERIFY(!launcher.terminate());
+    QVERIFY(launcher.isRunning());
+    launcher.stopTracking();
+    QVERIFY(!launcher.isRunning());
 }
 
 QTEST_GUILESS_MAIN(TestLauncher)

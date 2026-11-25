@@ -12,6 +12,11 @@ Rectangle {
     property bool launching: false   // true until the process has started
     property bool waiting: false     // a Steam launch waiting for its game
     property bool tracked: false     // a Steam launch: Guide (held) returns
+    property bool closable: false    // a web app / stream: Guide (held) closes it
+    // The TV remote pressed Home once: a second press within 1.5 s closes it.
+    // (Under cage the app's window covers ours until M6, so this hint shows
+    // only where MightyOS stays visible; the double press works either way.)
+    property bool remoteCloseArmed: false
     property bool active: false
 
     color: Theme.scrim
@@ -85,8 +90,10 @@ Rectangle {
         Text {
             textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
-            text: overlay.waiting ? qsTr("Hold the Guide button to stop waiting")
+            text: overlay.remoteCloseArmed ? qsTr("Press Home again to close")
+                : overlay.waiting ? qsTr("Hold the Guide button to stop waiting")
                 : overlay.tracked ? qsTr("Quit the game to return, or hold the Guide button")
+                : overlay.closable ? qsTr("Hold the Guide button to close it")
                 : qsTr("Close the app to return to MightyOS")
             color: Theme.textDim
             font.family: Theme.fontFamily

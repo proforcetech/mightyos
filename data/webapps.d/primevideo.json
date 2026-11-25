@@ -1,0 +1,24 @@
+{
+    "version": 1,
+    "id": "primevideo",
+    "label": "Prime Video",
+    "url": "https://www.primevideo.com/",
+    "hosts": [
+        "www.primevideo.com",
+        "primevideo.com"
+    ],
+    "icon": "tv",
+    "tint": "#00a8e1",
+    "order": 40,
+    "browser": "auto",
+    "drm": true,
+    "kidsHosts": [
+        "*.primevideo.com",
+        "*.media-amazon.com",
+        "*.amazonvideo.com",
+        "*.aiv-cdn.net",
+        "*.aiv-delivery.net",
+        "*.pv-cdn.net"
+    ],
+    "comment": "kidsHosts: CDNs a kids profile may reach (best effort, verify by hand)."
+}

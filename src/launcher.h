@@ -90,6 +90,18 @@ public:
     // as launch() (argv only, clean env, own session), not tracked and not
     // affecting `running`. False if the program isn't found.
     bool runAuxiliary(const QStringList &argv);
+    // Closes the running app on request (Guide held on a kiosk web app or a
+    // Moonlight stream, which have no exit of their own a gamepad reaches):
+    // SIGTERM to its process group (flatpak run / bwrap / the browser),
+    // SIGKILL to the same group kTerminateGraceMs later if anything in it
+    // is still alive (a Launcher-owned timer keyed by the pgid, so it also
+    // catches members that outlive the leader). The end is reported as
+    // exited(id, 0). Untracked launches only: false for a tracked (Steam)
+    // launch, whose process may be the Steam client (use stopTracking()),
+    // and when nothing runs. A second call while closing returns true and
+    // does nothing.
+    Q_INVOKABLE bool terminate();
+    static constexpr int kTerminateGraceMs = 3000;
 
     // argv of the bundled test program, the launch target for (mock)
     // games until the real library arrives in M4. Apps launch with the
@@ -122,4 +134,5 @@ private:
     bool m_waiting = false;
     QString m_currentId;
     bool m_running = false;
+    bool m_terminating = false;
 };

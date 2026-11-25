@@ -8,6 +8,7 @@
 
 class Library;
 class AppRegistry;
+class MediaLibrary;
 
 // Maps an item key (game, app or system id) to the tile that shows it.
 // Favorites and History store keys only and resolve them through this, so
@@ -30,13 +31,16 @@ signals:
     void changed();
 };
 
-// The real resolver: Library (games, systems; mock or scanned) + AppRegistry (apps).
+// The real resolver: AppRegistry (apps; for kids profiles only those
+// Library::itemAllowed() lists), MediaLibrary (web apps, Moonlight) and
+// Library (games, systems; mock or scanned).
 class CatalogResolver : public ItemResolver
 {
     Q_OBJECT
 
 public:
-    CatalogResolver(Library *library, AppRegistry *registry, QObject *parent = nullptr);
+    CatalogResolver(Library *library, AppRegistry *registry, MediaLibrary *media = nullptr,
+                    QObject *parent = nullptr);
 
     std::optional<TileItem> resolve(const QString &key) const override;
     // App keys before AppRegistry's first real scan.
@@ -45,4 +49,5 @@ public:
 private:
     QPointer<Library> m_library;
     QPointer<AppRegistry> m_registry;
+    QPointer<MediaLibrary> m_media;
 };

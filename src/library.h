@@ -83,6 +83,8 @@ class Library : public QObject
     Q_PROPERTY(int gameCount READ gameCount NOTIFY changed FINAL)
     // The active profile is a kids profile (PLAN D13).
     Q_PROPERTY(bool restricted READ isRestricted NOTIFY restrictedChanged FINAL)
+    // Games whose ROM dir is missing ("Not connected"), all systems.
+    Q_PROPERTY(int missingCount READ missingCount NOTIFY changed FINAL)
 
 public:
     static constexpr qint64 kMaxFileBytes = 4 * 1024 * 1024;
@@ -126,6 +128,14 @@ public:
     void setShowAllSystems(bool show);
     int gameCount() const;
     bool isRestricted() const { return m_allow.restricted; }
+    int missingCount() const;
+
+    // Kids allow-list for everything that is not a game or system (PLAN
+    // D13, M5): apps (flatpak:/desktop:/app:), web apps (webapp:<id>) and
+    // Moonlight (moonlight:<host>/<app>, each app named; the host part is
+    // compared case-insensitively), from the "apps" array of allowed.json.
+    // Always true for standard profiles.
+    Q_INVOKABLE bool itemAllowed(const QString &key) const;
 
     // Systems of a Home category ("emulators", "games"); an empty model for
     // anything else.
@@ -143,6 +153,11 @@ public:
     Q_INVOKABLE QString adjacentSystem(const QString &systemId, int delta) const;
 
     Q_INVOKABLE void rescan();
+    // A full re-scan that also drops the cached games of missing ROM dirs
+    // (deliberately deleted folders, a drive that is gone for good) from
+    // the grids and library.sqlite. Returns how many games are dropped
+    // (the current missingCount; 0: nothing to do, no scan).
+    Q_INVOKABLE int forgetMissing();
 
     // Starts the game (through Launcher). { ok, attempted, message, install }:
     // attempted == false means Launcher was not called (message says why:
@@ -192,6 +207,8 @@ signals:
     void readyChanged();
     void scannedChanged();
     void restrictedChanged();
+    // allowed.json was (re)loaded: profile switch. Emitted synchronously.
+    void allowListChanged();
     void scanningChanged();
     void showAllSystemsChanged();
     void scanFinished();
@@ -204,7 +221,7 @@ private:
     };
     struct Allow {
         bool restricted = false;
-        QSet<QString> systems, games;
+        QSet<QString> systems, games, apps;
     };
     enum ScanKind { FullScan = 1, SteamScan = 2 };
     void applyRegistry(const SystemRegistry &registry);
@@ -254,6 +271,7 @@ private:
     bool m_scannedOnce = false;
     int m_pendingKinds = 0;        // scan kinds to run after the current one
     bool m_pendingRegistry = false;
+    bool m_pendingForget = false;  // the next full scan drops offline games
     int m_timerKinds = 0;          // kinds the debounce timer will start
     bool m_afterLaunch = false;    // a watcher re-scan waits for the game to end
     bool m_kidsSteamFlatpak = false;

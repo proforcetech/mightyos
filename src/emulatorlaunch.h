@@ -16,6 +16,11 @@ struct LaunchEnv {
     QStringList pathDirs;                // the *sanitised* child PATH
     QStringList flatpakInstallations;    // ~/.local/share/flatpak, /var/lib/flatpak
     QStringList retroarchCoreDirs;       // native RetroArch cores
+    // Native browsers are only taken from fixed system paths (WebAppLaunch)
+    // owned by `trustedUid` (root). Tests point `systemRoot` at a temp dir
+    // and trust their own uid.
+    QString systemRoot;
+    uint trustedUid = 0;
 
     static LaunchEnv fromEnvironment();
     QString findProgram(const QString &name) const;

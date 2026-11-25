@@ -124,6 +124,10 @@ qt_add_qml_module(mightyos_core
         src/apikeystore.h src/apikeystore.cpp
         src/steamgriddb.h src/steamgriddb.cpp
         src/artworkscraper.h src/artworkscraper.cpp
+        src/definitionlayers.h src/definitionlayers.cpp
+        src/webapps.h src/webapps.cpp
+        src/moonlight.h src/moonlight.cpp
+        src/medialibrary.h src/medialibrary.cpp
 )
 # Mock library (systems + games) for tests and `--mock-library` dev runs.
 qt_add_resources(mightyos_core "mightyos_mockdata"
@@ -138,6 +142,14 @@ qt_add_resources(mightyos_core "mightyos_systems"
     PREFIX /mightyos
     BASE data
     FILES ${MIGHTYOS_SYSTEM_DEFS})
+# Built-in web-app tiles (streaming services), installed to
+# share/mightyos/webapps.d like systems.d.
+file(GLOB MIGHTYOS_WEBAPP_DEFS CONFIGURE_DEPENDS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
+     "${CMAKE_CURRENT_SOURCE_DIR}/data/webapps.d/*.json")
+qt_add_resources(mightyos_core "mightyos_webapps"
+    PREFIX /mightyos
+    BASE data
+    FILES ${MIGHTYOS_WEBAPP_DEFS})
 target_include_directories(mightyos_core PUBLIC src)
 target_link_libraries(mightyos_core PUBLIC Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Concurrent
                                            Qt6::Sql Qt6::Network)
@@ -191,6 +203,9 @@ qt_add_qml_module(mightyos_ui
         qml/screens/CategoryScreen.qml
         qml/screens/AppListScreen.qml
         qml/screens/ArtworkScreen.qml
+        qml/screens/MediaScreen.qml
+        qml/screens/MoonlightScreen.qml
+        qml/screens/MediaSettingsScreen.qml
         qml/ProfilePicker.qml
         qml/ProfileEditor.qml
         qml/ChoiceRow.qml
@@ -248,7 +263,11 @@ mightyos_set_warnings(mightyos-inputtest)
 # Install (packaging proper is M6): binaries and the default systems.d.
 # ---------------------------------------------------------------------------
 install(TARGETS mightyos RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(DIRECTORY data/systems.d DESTINATION ${CMAKE_INSTALL_DATADIR}/mightyos
+install(DIRECTORY data/systems.d data/webapps.d DESTINATION ${CMAKE_INSTALL_DATADIR}/mightyos
+        FILES_MATCHING PATTERN "*.json")
+# Optional managed browser policy (PLAN section 4): shipped, never put into
+# /etc by MightyOS; copying it is an install-time step for the admin.
+install(DIRECTORY data/browser-policies DESTINATION ${CMAKE_INSTALL_DATADIR}/mightyos
         FILES_MATCHING PATTERN "*.json")
 
 
@@ -311,6 +330,9 @@ if(MIGHTYOS_BUILD_TESTS)
     mightyos_add_test(tst_steam)
     mightyos_add_test(tst_library)
     mightyos_add_test(tst_scraper LIBS Qt6::Gui)
+    mightyos_add_test(tst_webapps)
+    mightyos_add_test(tst_moonlight)
+    mightyos_add_test(tst_media)
 
     # Qt Quick Test: components, NavStack and the whole Main window
     # (tests/qml/tst_*.qml). tst_main launches the test app.

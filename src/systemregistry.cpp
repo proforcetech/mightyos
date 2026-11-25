@@ -1,12 +1,9 @@
 #include "systemregistry.h"
 
+#include "definitionlayers.h"
 #include "ids.h"
-#include "jsonfile.h"
 #include "textsanitize.h"
 
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -14,13 +11,10 @@
 #include <QMap>
 #include <QRegularExpression>
 #include <QSet>
-#include <QStandardPaths>
 #include <QMutex>
 #include <QMutexLocker>
 #include <algorithm>
 
-#include <sys/stat.h>
-#include <unistd.h>
 
 Q_LOGGING_CATEGORY(lcSystems, "mightyos.systems", QtWarningMsg)
 
@@ -51,19 +45,6 @@ bool matches(const char *pattern, const QString &text)
         re = it.value();
     }
     return re.match(text).hasMatch();
-}
-
-// Definitions decide which programs run: a file (and its directory) must
-// belong to us or root and not be writable by others. Group write is only
-// accepted for our own primary group: Ubuntu gives every user a private
-// group and a umask of 002, so the user's own files are group-writable.
-bool trustedOwnerAndMode(uint owner, uint group, uint mode)
-{
-    if (owner != ::getuid() && owner != 0)
-        return false;
-    if (mode & 002)
-        return false;
-    return !(mode & 020) || group == ::getgid();
 }
 
 // A display string: 1..maxChars, no control/bidi characters (the
@@ -316,18 +297,7 @@ std::optional<SystemDef> SystemRegistry::parse(const QByteArray &json, const QSt
 
 QStringList SystemRegistry::defaultDirs()
 {
-    QStringList dirs { kBuiltinDir };
-    // XDG_DATA_DIRS is most important first; layers go least important first.
-    QStringList data = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
-    const QString dataHome = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
-    data.removeAll(dataHome);
-    std::reverse(data.begin(), data.end());
-    for (const QString &d : std::as_const(data))
-        dirs.append(d + QStringLiteral("/mightyos/systems.d"));
-    const QString config = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-    if (!config.isEmpty())
-        dirs.append(config + QStringLiteral("/mightyos/systems.d"));
-    return dirs;
+    return DefinitionLayers::defaultDirs(kBuiltinDir, QStringLiteral("systems.d"));
 }
 
 void SystemRegistry::load(const QStringList &dirs, const QString &home)
@@ -335,57 +305,25 @@ void SystemRegistry::load(const QStringList &dirs, const QString &home)
     QMap<QString, SystemDef> byId;
     m_errors.clear();
     for (const QString &dir : dirs) {
-        const bool builtin = dir.startsWith(QLatin1String(":/"));
-        if (!builtin && !Ids::isCleanAbsolutePath(dir))
+        const DefinitionLayers::Layer layer = DefinitionLayers::read(dir, kMaxFilesPerDir, kMaxFileBytes);
+        if (!layer.dirError.isEmpty()) {
+            const QString message = QStringLiteral("%1: %2").arg(dir, layer.dirError);
+            m_errors.append(message);
+            qCWarning(lcSystems).noquote() << "ignoring system definitions in" << message;
             continue;
-        QDir d(dir);
-        if (!builtin) {
-            struct stat dst {};
-            if (::stat(QFile::encodeName(dir).constData(), &dst) != 0)
-                continue;   // no such layer: normal
-            if (!S_ISDIR(dst.st_mode) || !trustedOwnerAndMode(dst.st_uid, dst.st_gid, dst.st_mode)) {
-                const QString message = QStringLiteral("%1: directory is writable by other users or not ours; ignored").arg(dir);
-                m_errors.append(message);
-                qCWarning(lcSystems).noquote() << "ignoring system definitions in" << message;
-                continue;
-            }
         }
-        const QStringList names = d.entryList({ QStringLiteral("*.json") }, QDir::Files | QDir::Readable, QDir::Name);
-        int count = 0;
-        for (const QString &name : names) {
-            if (++count > kMaxFilesPerDir)
-                break;
-            const QString path = dir + QLatin1Char('/') + name;
-            std::optional<QByteArray> data;
-            bool untrusted = false;
-            if (builtin) {
-                QFile f(path);
-                if (f.open(QIODevice::ReadOnly) && f.size() <= kMaxFileBytes)
-                    data = f.readAll();
-            } else {
-                // No symlinks, regular files only, capped (fd checks).
-                uint owner = 0, mode = 0, group = 0;
-                data = JsonFile::readRegularFile(path, kMaxFileBytes, false, nullptr, &owner, &mode, &group);
-                if (data && !trustedOwnerAndMode(owner, group, mode)) {
-                    data.reset();
-                    untrusted = true;
-                }
-            }
-            QString error;
+        for (const DefinitionLayers::File &file : layer.files) {
+            QString error = file.error;
             bool disabled = false;
             std::optional<SystemDef> def;
-            if (untrusted)
-                error = QStringLiteral("not ours (or root's), or writable by other users");
-            else if (!data)
-                error = QStringLiteral("unreadable, too large or not a regular file");
-            else
-                def = parse(*data, home, &error, &disabled);
-            if (def && name != def->id + QStringLiteral(".json")) {
+            if (file.data)
+                def = parse(*file.data, home, &error, &disabled);
+            if (def && file.name != def->id + QStringLiteral(".json")) {
                 def.reset();
                 error = QStringLiteral("file name must be <id>.json");
             }
             if (!def) {
-                const QString message = QStringLiteral("%1: %2").arg(path, error);
+                const QString message = QStringLiteral("%1: %2").arg(file.path, error);
                 m_errors.append(message);
                 qCWarning(lcSystems).noquote() << "ignoring system definition" << message;
                 continue;
@@ -394,9 +332,9 @@ void SystemRegistry::load(const QStringList &dirs, const QString &home)
                 byId.remove(def->id);
                 continue;
             }
-            def->source = path;
+            def->source = file.path;
             if (const auto previous = byId.constFind(def->id); previous != byId.cend())
-                qCWarning(lcSystems).noquote() << path << "overrides the definition of" << def->id
+                qCWarning(lcSystems).noquote() << file.path << "overrides the definition of" << def->id
                                                << "from" << previous->source;
             byId.insert(def->id, *def);
         }

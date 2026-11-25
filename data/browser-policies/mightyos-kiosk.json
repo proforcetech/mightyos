@@ -1,0 +1,32 @@
+{
+    "DeveloperToolsAvailability": 2,
+    "URLBlocklist": [
+        "file://*",
+        "chrome://*",
+        "chrome-untrusted://*",
+        "brave://*",
+        "edge://*",
+        "view-source:*",
+        "javascript://*",
+        "ftp://*",
+        "mailto:*",
+        "tel:*",
+        "sms:*",
+        "intent:*",
+        "steam:*"
+    ],
+    "ExternalProtocolDialogShowAlwaysOpenCheckbox": false,
+    "AutoLaunchProtocolsFromOrigins": [],
+    "DownloadRestrictions": 3,
+    "BrowserSignin": 0,
+    "PasswordManagerEnabled": true,
+    "PromptForDownloadLocation": false,
+    "TranslateEnabled": false,
+    "DefaultBrowserSettingEnabled": false,
+    "PrintingEnabled": false,
+    "BrowserGuestModeEnabled": false,
+    "BrowserAddPersonEnabled": false,
+    "ExtensionInstallBlocklist": [
+        "*"
+    ]
+}

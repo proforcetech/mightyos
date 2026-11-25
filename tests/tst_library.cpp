@@ -28,6 +28,7 @@ private slots:
     void emptyCacheStaysPending();
     void kidsGridSurvivesStartup();
     void missingRomDirKeepsGames();
+    void forgetMissingGames();
     void retroarchConfigNeverFollowsSymlinks();
     void rescanIsADiff();
     void showAllSystems();
@@ -206,6 +207,28 @@ void TestLibrary::missingRomDirKeepsGames()
     library->rescan();
     library->waitForScan();
     QVERIFY(!games->get(0).value(QStringLiteral("subtitle")).toString().contains(QLatin1String("Not connected")));
+}
+
+void TestLibrary::forgetMissingGames()
+{
+    // M4 review follow-up: a deliberately deleted ROM folder can be forgotten.
+    auto library = make();
+    QCOMPARE(library->missingCount(), 0);
+    QCOMPARE(library->forgetMissing(), 0);   // nothing to do: no scan
+    QVERIFY(!library->isScanning());
+    QVERIFY(QDir(home() + QStringLiteral("/ROMs/snes")).removeRecursively());
+    library->rescan();
+    library->waitForScan();
+    QCOMPARE(library->missingCount(), 3);
+    QCOMPARE(library->games(QStringLiteral("snes"))->count(), 3);   // "Not connected"
+    QCOMPARE(library->forgetMissing(), 3);
+    library->waitForScan();
+    QCOMPARE(library->missingCount(), 0);
+    QCOMPARE(library->games(QStringLiteral("snes"))->count(), 0);
+    // Gone from library.sqlite too: the next start doesn't bring them back.
+    library.reset();
+    auto again = make(false);
+    QCOMPARE(again->gameCount(), 0);
 }
 
 void TestLibrary::retroarchConfigNeverFollowsSymlinks()
