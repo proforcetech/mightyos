@@ -10,12 +10,16 @@
 #include <QProcessEnvironment>
 #include <QStandardPaths>
 
+#include <algorithm>
+
 LaunchEnv LaunchEnv::fromEnvironment()
 {
     LaunchEnv env;
     env.home = QDir::homePath();
     env.dataHome = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     env.stateHome = QStandardPaths::writableLocation(QStandardPaths::GenericStateLocation);
+    env.runtimeDir = qEnvironmentVariable("XDG_RUNTIME_DIR");
+    env.user = qEnvironmentVariable("USER");
     const QProcessEnvironment child = Launcher::buildChildEnvironment(QProcessEnvironment::systemEnvironment());
     env.pathDirs = child.value(QStringLiteral("PATH")).split(QLatin1Char(':'), Qt::SkipEmptyParts);
     if (!env.dataHome.isEmpty())
@@ -102,6 +106,108 @@ QStringList substitute(const QStringList &args, const QHash<QString, QString> &v
     return out;
 }
 
+QString allowedRomDir(const QString &dir, const LaunchEnv &env, QString *problem)
+{
+    QString why;
+    QString &reason = problem ? *problem : why;
+    if (!Ids::isCleanAbsolutePath(dir)) {
+        reason = QStringLiteral("not a clean absolute path");
+        return {};
+    }
+    const QString canonical = QFileInfo(dir).canonicalFilePath();
+    if (canonical.isEmpty() || !QFileInfo(canonical).isDir()) {
+        reason = QStringLiteral("missing");
+        return {};
+    }
+    if (canonical.contains(QLatin1Char(':'))) {
+        reason = QStringLiteral("contains ':'");
+        return {};
+    }
+    const auto under = [&](const QString &root) {
+        return !root.isEmpty() && canonical.startsWith(root + QLatin1Char('/'));
+    };
+    const QString runtime = env.runtimeDir.isEmpty() ? QString() : QFileInfo(env.runtimeDir).canonicalFilePath();
+    if (under(runtime) || canonical == runtime) {
+        reason = QStringLiteral("inside XDG_RUNTIME_DIR");
+        return {};
+    }
+    // A strict subfolder of `root` with no hidden component.
+    const auto visibleBelow = [&](const QString &root) {
+        if (!under(root))
+            return false;
+        const QStringList parts = canonical.mid(root.size() + 1).split(QLatin1Char('/'));
+        return std::none_of(parts.cbegin(), parts.cend(), [](const QString &p) { return p.startsWith(QLatin1Char('.')); });
+    };
+    const QString home = env.home.isEmpty() ? QString() : QFileInfo(env.home).canonicalFilePath();
+    QStringList roots { QStringLiteral("/media"), QStringLiteral("/mnt"), QStringLiteral("/srv") };
+    if (!env.user.isEmpty() && !env.user.contains(QLatin1Char('/')))
+        roots.append(QStringLiteral("/run/media/") + env.user);
+    if (!home.isEmpty() && home != QLatin1String("/"))
+        roots.prepend(home);
+    for (const QString &root : std::as_const(roots)) {
+        if (visibleBelow(root))
+            return canonical;
+    }
+    reason = !home.isEmpty() && (canonical == home || under(home))
+        ? QStringLiteral("the home folder itself or a hidden folder in it")
+        : QStringLiteral("not under the home folder, /media, /run/media/<user>, /mnt or /srv");
+    return {};
+}
+
+QStringList flatpakSandboxArgs(const SystemDef &system, const QString &romPath, bool strict, const LaunchEnv &env,
+                               const QStringList &rwDirs, QStringList *rejected)
+{
+    QStringList args { QStringLiteral("--die-with-parent") };
+    if (strict) {
+        args << QStringLiteral("--nofilesystem=host:reset")
+             << QStringLiteral("--filesystem=/run/udev:ro")
+             << QStringLiteral("--nodevice=all") << QStringLiteral("--device=dri") << QStringLiteral("--device=input")
+             << QStringLiteral("--nosocket=session-bus") << QStringLiteral("--nosocket=system-bus")
+             << QStringLiteral("--nosocket=ssh-auth") << QStringLiteral("--nosocket=x11")
+             << QStringLiteral("--nosocket=fallback-x11")
+             << QStringLiteral("--unshare=network");
+    }
+    QStringList dirs;
+    for (const QString &dir : system.romDirs) {
+        QString problem;
+        const QString allowed = allowedRomDir(dir, env, &problem);
+        if (allowed.isEmpty()) {
+            if (rejected && problem != QLatin1String("missing"))
+                rejected->append(dir + QStringLiteral(" (") + problem + QLatin1Char(')'));
+        } else if (!dirs.contains(allowed)) {
+            dirs.append(allowed);
+        }
+    }
+    const QString rom = QFileInfo(romPath).canonicalFilePath();
+    const bool covered = std::any_of(dirs.cbegin(), dirs.cend(), [&](const QString &dir) {
+        return (rom.isEmpty() ? romPath : rom).startsWith(dir + QLatin1Char('/'));
+    });
+    if (!covered) {
+        const QString parent = QFileInfo(rom.isEmpty() ? romPath : rom).absolutePath();
+        QString problem;
+        const QString allowed = allowedRomDir(parent, env, &problem);
+        if (!allowed.isEmpty() && !dirs.contains(allowed))
+            dirs.append(allowed);
+        else if (allowed.isEmpty() && rejected)
+            rejected->append(parent + QStringLiteral(" (") + problem + QLatin1Char(')'));
+    }
+    for (const QString &dir : std::as_const(dirs))
+        args.append(QStringLiteral("--filesystem=") + dir + QStringLiteral(":ro"));
+    // Our own dirs only (a user-defined emulator's {saves}).
+    const QStringList ownRoots {
+        env.dataHome.isEmpty() ? QString() : env.dataHome + QStringLiteral("/mightyos/"),
+        env.stateHome.isEmpty() ? QString() : env.stateHome + QStringLiteral("/mightyos/"),
+    };
+    for (const QString &dir : rwDirs) {
+        const bool ours = Ids::isCleanAbsolutePath(dir) && !dir.contains(QLatin1Char(':'))
+            && std::any_of(ownRoots.cbegin(), ownRoots.cend(),
+                           [&](const QString &root) { return !root.isEmpty() && dir.startsWith(root); });
+        if (ours)
+            args.append(QStringLiteral("--filesystem=") + dir);
+    }
+    return args;
+}
+
 QString savesDir(const LaunchEnv &env, const QString &profileId, const QString &system)
 {
     if (env.dataHome.isEmpty() || !Ids::isValidProfileId(profileId) || !SystemRegistry::isValidSystemId(system))
@@ -158,7 +264,8 @@ LaunchPlan plan(const SystemDef &system, const EmulatorDef &emulator, const QStr
         } else if (!flatpakCore.isEmpty()) {
             if (cfgSafe(cfgDir))
                 fsArg = { QStringLiteral("--filesystem=") + cfgDir + QStringLiteral(":ro") };
-            p.argv = QStringList { env.flatpakProgram(), QStringLiteral("run") } + fsArg
+            p.argv = QStringList { env.flatpakProgram(), QStringLiteral("run") }
+                     + flatpakSandboxArgs(system, romPath, !emulator.appSandbox, env) + fsArg
                      + QStringList { kRetroArchFlatpak, QStringLiteral("-L"), flatpakCore };
             saveBase = raHome + QStringLiteral("/data/mightyos/profiles/") + profileId + QStringLiteral("/saves/") + system.id;
         } else if (!nativeProgram.isEmpty() || flatpakRa) {
@@ -227,7 +334,13 @@ LaunchPlan plan(const SystemDef &system, const EmulatorDef &emulator, const QStr
             p.install = emulator.label;
             return p;
         }
-        p.argv = QStringList { flatpak, QStringLiteral("run"), emulator.app } + substitute(emulator.args, values);
+        // A {saves} dir is ours (data dir): it must be writable inside.
+        const QStringList rw = emulator.args.contains(QStringLiteral("{saves}")) ? QStringList { saves } : QStringList();
+        if (!rw.isEmpty())
+            QDir().mkpath(saves);
+        p.argv = QStringList { flatpak, QStringLiteral("run") }
+                 + flatpakSandboxArgs(system, romPath, !emulator.appSandbox, env, rw)
+                 + QStringList { emulator.app } + substitute(emulator.args, values);
         return p;
     }
     const QString program = env.findProgram(emulator.program);

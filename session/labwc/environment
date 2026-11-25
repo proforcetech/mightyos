@@ -1,0 +1,4 @@
+# Environment for the MightyOS labwc session (read by labwc at startup).
+# Intentionally empty: mightyos-session sets XKB_DEFAULT_OPTIONS (adding
+# srvrkeys:none to the user's own options, which a value here would
+# replace). Keyboard layout, e.g.: XKB_DEFAULT_LAYOUT=de

@@ -71,8 +71,9 @@ public:
                              qint64 diskBudget = kDefaultDiskBudgetBytes);
     ~ArtworkProvider() override;
 
-    // Registers a new provider as "art" on `engine` (which takes ownership).
-    static void install(QQmlEngine *engine);
+    // Registers a new provider as "art" on `engine` (which takes ownership
+    // and outlives every use of the returned pointer).
+    static ArtworkProvider *install(QQmlEngine *engine);
 
     static QString urlFor(const QString &spec);
     static QString defaultCacheDir();
@@ -92,6 +93,15 @@ public:
     // budget. Thread-safe; returns the number of files removed.
     int trimDiskCache();
 
+    // Safe mode: every request fails (tiles fall back to vector icons), no
+    // file is opened or decoded. Thread-safe.
+    void setDisabled(bool disabled) { m_disabled.store(disabled); }
+    bool isDisabled() const { return m_disabled.load(); }
+
+    // Drops the decoded-image memory cache (dormant mode while an app
+    // runs); the disk cache stays. Thread-safe; returns the bytes freed.
+    qsizetype trimMemory();
+
     Stats stats() const;
     QString cacheDir() const { return m_cacheDir; }
     QThreadPool *pool() { return &m_pool; }
@@ -103,6 +113,7 @@ private:
     QString m_cacheDir;
     const IconLocator *m_icons;
     std::atomic<qint64> m_diskBudget;
+    std::atomic<bool> m_disabled { false };
     QThreadPool m_pool;
     mutable QMutex m_mutex;
     QMutex m_trimMutex;

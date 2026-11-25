@@ -1,0 +1,6 @@
+# MightyOS (PLAN D16): HDMI-CEC adapters for the user at the seat.
+# The active local session gets an ACL on /dev/cecN (uaccess), so the kiosk
+# user never needs the "video" group. Copy to /etc/udev/rules.d/ (it must
+# sort before 73-seat-late.rules), then: sudo udevadm control --reload &&
+# sudo udevadm trigger --subsystem-match=cec
+SUBSYSTEM=="cec", KERNEL=="cec[0-9]*", TAG+="uaccess"

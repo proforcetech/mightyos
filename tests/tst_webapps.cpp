@@ -304,7 +304,7 @@ void TestWebApps::planArgv()
     QVERIFY2(plan.ok(), qPrintable(plan.error));
     const QString dataDir = env.home + QStringLiteral("/.var/app/com.google.Chrome/data/mightyos/profiles/kid");
     QCOMPARE(plan.argv, (QStringList {
-        tmp.path() + QStringLiteral("/bin/flatpak"), QStringLiteral("run"),
+        tmp.path() + QStringLiteral("/bin/flatpak"), QStringLiteral("run"), QStringLiteral("--die-with-parent"),
         QStringLiteral("--nodevice=all"), QStringLiteral("--device=dri"), QStringLiteral("--device=input"),
         QStringLiteral("--nofilesystem=host"), QStringLiteral("--nofilesystem=home"),
         QStringLiteral("--nofilesystem=xdg-documents"), QStringLiteral("--nofilesystem=xdg-download"),
@@ -317,11 +317,11 @@ void TestWebApps::planArgv()
 
     // Another profile, another data dir (no shared logins).
     const LaunchPlan other = WebAppLaunch::plan(app, QStringLiteral("parent"), env);
-    QVERIFY(other.argv.at(10) != plan.argv.at(10));
-    QVERIFY(plan.argv.at(10).startsWith(QLatin1String("--user-data-dir=")));
+    QVERIFY(other.argv.at(11) != plan.argv.at(11));
+    QVERIFY(plan.argv.at(11).startsWith(QLatin1String("--user-data-dir=")));
     // The user agent is one element; invalid input never reaches argv.
     app.userAgent = QStringLiteral("Mozilla/5.0 (SMART-TV; Linux)");
-    QCOMPARE(WebAppLaunch::plan(app, QStringLiteral("kid"), env).argv.at(18), QStringLiteral("--user-agent=Mozilla/5.0 (SMART-TV; Linux)"));
+    QCOMPARE(WebAppLaunch::plan(app, QStringLiteral("kid"), env).argv.at(19), QStringLiteral("--user-agent=Mozilla/5.0 (SMART-TV; Linux)"));
     app.url = QStringLiteral("https://evil.example/");
     QVERIFY(!WebAppLaunch::plan(app, QStringLiteral("kid"), env).ok());
     app.url = QStringLiteral("https://www.netflix.com/browse");

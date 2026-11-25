@@ -14,9 +14,11 @@ Rectangle {
     property bool tracked: false     // a Steam launch: Guide (held) returns
     property bool closable: false    // a web app / stream: Guide (held) closes it
     // The TV remote pressed Home once: a second press within 1.5 s closes it.
-    // (Under cage the app's window covers ours until M6, so this hint shows
-    // only where MightyOS stays visible; the double press works either way.)
+    // (The app's window covers ours, so this hint shows only where MightyOS
+    // stays visible; the Guide menu shows it too.)
     property bool remoteCloseArmed: false
+    // Holding Guide opens the Guide menu over the app (layer shell).
+    property bool guideAvailable: false
     property bool active: false
 
     color: Theme.scrim
@@ -91,6 +93,7 @@ Rectangle {
             textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
             text: overlay.remoteCloseArmed ? qsTr("Press Home again to close")
+                : overlay.guideAvailable ? qsTr("Hold the Guide button (or Ctrl+Alt+Home) for Resume / Close")
                 : overlay.waiting ? qsTr("Hold the Guide button to stop waiting")
                 : overlay.tracked ? qsTr("Quit the game to return, or hold the Guide button")
                 : overlay.closable ? qsTr("Hold the Guide button to close it")

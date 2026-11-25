@@ -1,5 +1,9 @@
 #include "systemregistry.h"
 
+#include <QFile>
+#include <QFileInfo>
+#include <sys/stat.h>
+
 #include "definitionlayers.h"
 #include "ids.h"
 #include "textsanitize.h"
@@ -242,9 +246,9 @@ std::optional<SystemDef> SystemRegistry::parse(const QByteArray &json, const QSt
             if (!value.isObject())
                 return fail(QStringLiteral("emulators: objects only"));
             const QJsonObject e = value.toObject();
-            if (!keysAllowed(e, { "id", "label", "type", "core", "app", "program", "args" }, &bad))
+            if (!keysAllowed(e, { "id", "label", "type", "core", "app", "program", "args", "sandbox" }, &bad))
                 return fail(QStringLiteral("emulator: unknown key \"%1\"").arg(bad.left(40)));
-            for (const char *key : { "id", "label", "type", "core", "app", "program" }) {
+            for (const char *key : { "id", "label", "type", "core", "app", "program", "sandbox" }) {
                 if (e.contains(QLatin1String(key)) && !e.value(QLatin1String(key)).isString())
                     return fail(QStringLiteral("emulator: \"%1\" must be a string").arg(QLatin1String(key)));
             }
@@ -257,6 +261,12 @@ std::optional<SystemDef> SystemRegistry::parse(const QByteArray &json, const QSt
             if (!isCleanLabel(def.label, 48))
                 return fail(QStringLiteral("emulator: invalid label"));
             ids.insert(def.id);
+            const QString sandbox = e.value(QStringLiteral("sandbox")).toString(QStringLiteral("strict"));
+            if (sandbox != QLatin1String("strict") && sandbox != QLatin1String("app"))
+                return fail(QStringLiteral("emulator: sandbox must be \"strict\" or \"app\""));
+            if (e.contains(QStringLiteral("sandbox")) && type == QLatin1String("native"))
+                return fail(QStringLiteral("native emulator: no \"sandbox\" (Flatpak only)"));
+            def.appSandbox = sandbox == QLatin1String("app");
             const bool hasArgs = e.contains(QStringLiteral("args"));
             if (hasArgs && !stringList(e.value(QStringLiteral("args")), &def.args, kMaxArgs))
                 return fail(QStringLiteral("emulator: args must be strings"));
@@ -293,6 +303,22 @@ std::optional<SystemDef> SystemRegistry::parse(const QByteArray &json, const QSt
     if (!s.defaultEmulator.isEmpty() && !s.emulator(s.defaultEmulator))
         return fail(QStringLiteral("defaultEmulator is not one of the emulators"));
     return s;
+}
+
+bool SystemRegistry::sandboxLayerTrusted(const QString &dir, const QString &file, const QString &home)
+{
+    if (dir == kBuiltinDir)
+        return true;
+    const QString canonicalDir = QFileInfo(dir).canonicalFilePath();
+    const QString canonicalHome = home.isEmpty() ? QString() : QFileInfo(home).canonicalFilePath();
+    if (canonicalDir.isEmpty()
+        || (!canonicalHome.isEmpty() && (canonicalDir == canonicalHome || canonicalDir.startsWith(canonicalHome + QLatin1Char('/')))))
+        return false;
+    struct stat d {};
+    struct stat f {};
+    return ::stat(QFile::encodeName(canonicalDir).constData(), &d) == 0 && d.st_uid == 0 && !(d.st_mode & (S_IWGRP | S_IWOTH))
+        && ::lstat(QFile::encodeName(file).constData(), &f) == 0 && S_ISREG(f.st_mode) && f.st_uid == 0
+        && !(f.st_mode & (S_IWGRP | S_IWOTH));
 }
 
 QStringList SystemRegistry::defaultDirs()
@@ -333,6 +359,18 @@ void SystemRegistry::load(const QStringList &dirs, const QString &home)
                 continue;
             }
             def->source = file.path;
+            // "sandbox": "app" weakens the Flatpak sandbox: only from the
+            // built-in layer or a root-owned file in a root-owned dir outside
+            // $HOME (/usr/share/mightyos, /etc/...), never the user's layer.
+            if (!sandboxLayerTrusted(dir, file.path, home)) {
+                for (EmulatorDef &emulator : def->emulators) {
+                    if (emulator.appSandbox) {
+                        qCWarning(lcSystems).noquote() << file.path << ": \"sandbox\": \"app\" ignored for"
+                                                       << emulator.id << "(only root-owned definitions may relax it)";
+                        emulator.appSandbox = false;
+                    }
+                }
+            }
             if (const auto previous = byId.constFind(def->id); previous != byId.cend())
                 qCWarning(lcSystems).noquote() << file.path << "overrides the definition of" << def->id
                                                << "from" << previous->source;

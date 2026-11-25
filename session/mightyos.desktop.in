@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=MightyOS
+Comment=Console-style TV launcher (labwc kiosk session)
+Exec=@MIGHTYOS_SESSION_SCRIPT@
+TryExec=@MIGHTYOS_SESSION_SCRIPT@
+DesktopNames=MightyOS

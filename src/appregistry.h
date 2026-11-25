@@ -7,6 +7,7 @@
 #include <QFutureWatcher>
 #include <QHash>
 #include <QObject>
+#include <QSet>
 #include <QTimer>
 #include <QtQml/qqmlregistration.h>
 #include <atomic>
@@ -25,6 +26,14 @@
 // Models: `apps` (everything, sorted by title) and `media` (category
 // media). Both keep their identity across re-scans; rows are only reset
 // when the set of apps changed.
+//
+// Duplicates (M6): an app installed both natively and as a Flatpak (Kodi:
+// desktop:kodi and flatpak:tv.kodi.Kodi) gets one tile, the Flatpak's.
+// A native desktop:<id> is shadowed when <id> is the Flatpak's whole app
+// id (case-insensitive: org.mozilla.firefox.desktop installed natively) or
+// its Name is exactly the Flatpak's (Kodi / Kodi). Never by a part of an
+// id (shadowedApps()). Shadowed apps stay known:
+// favorites, history and command() still resolve them.
 //
 // Startup cache: the last scan result is kept in
 // $XDG_CACHE_HOME/mightyos/apps.json and loaded synchronously when the
@@ -79,6 +88,9 @@ public:
     const AppScanConfig &config() const { return m_config; }
 
     static TileItem tileFor(const AppInfo &app);
+    // The native ids that a Flatpak in `apps` shadows (see above).
+    static QSet<QString> shadowedApps(const QList<AppInfo> &apps);
+    Q_INVOKABLE bool isShadowed(const QString &id) const { return m_shadowed.contains(id); }
     static QString defaultCacheFile();
     QString cacheFile() const { return m_cacheFile; }
     // True while the content came from the startup cache only.
@@ -101,6 +113,7 @@ private:
     TileListModel m_apps;
     TileListModel m_media;
     QHash<QString, AppInfo> m_byId;
+    QSet<QString> m_shadowed;
     QFileSystemWatcher m_watcher;
     QTimer m_debounce;
     QFutureWatcher<AppScanResult> m_future;

@@ -30,6 +30,11 @@
 //         "app": "org.DolphinEmu.dolphin-emu", "args": ["-b", "-e", "{rom}"] },
 //       { "id": "x", "label": "X", "type": "native", "program": "x", "args": ["{rom}"] } ],
 //     "defaultEmulator": "snes9x" }
+// retroarch and flatpak emulators may add "sandbox": "strict" (default) |
+// "app" (EmulatorDef::appSandbox, EmulatorLaunch::flatpakSandboxArgs()).
+// "app" is honoured only from the built-in layer or a root-owned file in a
+// root-owned dir outside $HOME (sandboxLayerTrusted()); elsewhere it is
+// logged and ignored. Built in: Dolphin (GameCube adapter, Wiimotes).
 //
 // Argument templates: placeholders are whole argv elements, never parts of
 // one ("{rom}", "{saves}", "{appdata}"); an element containing '{' or '}' that is not
@@ -47,6 +52,10 @@ struct EmulatorDef {
     QString app;       // Flatpak: application id
     QString program;   // Native: bare name (PATH) or clean absolute path
     QStringList args;  // Flatpak / Native: argv template after the program
+    // Flatpak launches (also RetroArch's Flatpak): "sandbox": "strict"
+    // (default: only GPU and input devices, no host / home filesystem) or
+    // "app" (the app's own permissions; ROM folders still read-only).
+    bool appSandbox = false;
 };
 
 struct SystemDef {
@@ -85,6 +94,8 @@ public:
 
     // Loads `dirs` (lowest priority first). `home` expands "~/".
     void load(const QStringList &dirs, const QString &home);
+    // May definitions from `dir` relax the Flatpak sandbox ("sandbox": "app")?
+    static bool sandboxLayerTrusted(const QString &dir, const QString &file, const QString &home);
 
     // Parses one definition. nullopt + `*error` if invalid. A "disabled"
     // stub returns a SystemDef with an empty label and sets `*disabled`.

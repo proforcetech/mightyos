@@ -1,0 +1,18 @@
+# Example only (README "Session"): greetd starting MightyOS without a
+# login prompt, no shell involved. /etc/greetd/config.toml
+#
+# WARNING: as with any autologin, anyone at the keyboard is the kiosk user.
+# Lock its password (sudo passwd -l KIOSKUSER) and use the logind drop-in.
+[terminal]
+vt = 1
+
+# Runs once at boot as KIOSKUSER.
+[initial_session]
+command = "/usr/bin/mightyos-session"
+user = "KIOSKUSER"
+
+# After the session ends: a login prompt (a locked kiosk password can't
+# log in there; an admin account can).
+[default_session]
+command = "agreety --cmd /usr/bin/mightyos-session"
+user = "greeter"

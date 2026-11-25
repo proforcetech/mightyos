@@ -145,6 +145,12 @@ Item {
             tryVerify(() => win.launchStarted, 5000)
             win.launchClosable = true                    // as for a web app / stream
             InputRouter.postGuideHeld(InputRouter.Gamepad)
+            tryVerify(() => win.guideOpen)
+            InputRouter.muteFor(0)
+            // Close needs no confirmation for a web app / stream (D25).
+            verify(InputRouter.dispatch(InputRouter.Navigate, "down", InputRouter.Gamepad))
+            verify(InputRouter.dispatch(InputRouter.Accept, "", InputRouter.Gamepad))
+            verify(!win.guideOpen)
             tryVerify(() => !Launcher.running, 6000)     // terminated, not after 60 s
             verify(toast.shown)
             verify(toast.message.indexOf("Closed") >= 0, toast.message)
@@ -235,20 +241,34 @@ Item {
             verify(act(InputRouter.Accept))
             tryVerify(() => win.launchStarted, 5000)
             win.launchClosable = true
+            // Navigation only: Home opens the Guide menu, which the remote can
+            // only leave (Back / Home); it never arms closing.
             Settings.tvRemote = "navigation"
             InputRouter.postGuideHeld(InputRouter.Remote)
-            wait(150)
-            verify(Launcher.running)
+            tryVerify(() => win.guideOpen, 1000)
             verify(!win.remoteCloseArmed)
+            InputRouter.muteFor(0)
+            verify(!InputRouter.dispatch(InputRouter.Accept, "", InputRouter.Remote))
+            verify(InputRouter.dispatch(InputRouter.Guide, "", InputRouter.Remote))
+            verify(!win.guideOpen)
+            verify(Launcher.running)
+            // Full: the first Home opens the menu with "Press Home again to close".
             Settings.tvRemote = "full"
             InputRouter.postGuideHeld(InputRouter.Remote)
             tryVerify(() => win.remoteCloseArmed, 1000)
+            verify(win.guideOpen)
             verify(Launcher.running)
             tryVerify(() => !win.remoteCloseArmed, 2500)  // too slow: disarmed
             verify(Launcher.running)
+            InputRouter.muteFor(0)
+            verify(InputRouter.dispatch(InputRouter.Guide, "", InputRouter.Remote))   // just resumes now
+            verify(!win.guideOpen)
+            verify(Launcher.running)
             InputRouter.postGuideHeld(InputRouter.Remote)
             tryVerify(() => win.remoteCloseArmed, 1000)
-            InputRouter.postGuideHeld(InputRouter.Remote)
+            // The second Home arrives as a Guide press (the menu has input).
+            InputRouter.muteFor(0)
+            verify(InputRouter.dispatch(InputRouter.Guide, "", InputRouter.Remote))
             tryVerify(() => !Launcher.running, 6000)
             verify(toast.message.indexOf("Closed") >= 0, toast.message)
             Settings.tvRemote = before

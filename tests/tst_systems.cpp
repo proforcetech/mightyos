@@ -3,6 +3,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -26,6 +27,8 @@ private slots:
     void planRetroArch();
     void planFlatpakAndNative();
     void planSteam();
+    void flatpakSandboxArgs();
+    void sandboxKey();
 
 private:
     static QJsonObject valid()
@@ -302,15 +305,25 @@ void TestSystems::planRetroArch()
     QDir().mkpath(tmp.path() + QStringLiteral("/flatpak/app/org.libretro.RetroArch/current/active/files"));
     const QString raHome = env.home + QStringLiteral("/.var/app/org.libretro.RetroArch");
     write(raHome + QStringLiteral("/config/retroarch/cores/snes9x_libretro.so"), "x");
+    QVERIFY(QDir().mkpath(env.home + QStringLiteral("/ROMs/snes")));
     p = EmulatorLaunch::plan(*def, snes9x, rom, QStringLiteral("kid1"), env);
     QVERIFY(p.ok());
     // S1: the cfg is ours (state dir), mounted read-only into the sandbox;
     // never written into the sandbox-writable ~/.var/app tree.
+    // M6: strict sandbox (GPU + input only, no host/home), ROM folder read-only.
     const QString kidCfgDir = env.stateHome + QStringLiteral("/mightyos/profiles/kid1/retroarch");
-    QCOMPARE(p.argv.mid(0, 6), (QStringList { tmp.path() + QStringLiteral("/bin/flatpak"), QStringLiteral("run"),
-                                              QStringLiteral("--filesystem=") + kidCfgDir + QStringLiteral(":ro"),
-                                              QStringLiteral("org.libretro.RetroArch"), QStringLiteral("-L"),
-                                              raHome + QStringLiteral("/config/retroarch/cores/snes9x_libretro.so") }));
+    QCOMPARE(p.argv.mid(0, 19), (QStringList { tmp.path() + QStringLiteral("/bin/flatpak"), QStringLiteral("run"),
+                                               QStringLiteral("--die-with-parent"), QStringLiteral("--nofilesystem=host:reset"),
+                                               QStringLiteral("--filesystem=/run/udev:ro"),
+                                               QStringLiteral("--nodevice=all"), QStringLiteral("--device=dri"),
+                                               QStringLiteral("--device=input"), QStringLiteral("--nosocket=session-bus"),
+                                               QStringLiteral("--nosocket=system-bus"), QStringLiteral("--nosocket=ssh-auth"),
+                                               QStringLiteral("--nosocket=x11"), QStringLiteral("--nosocket=fallback-x11"),
+                                               QStringLiteral("--unshare=network"),
+                                               QStringLiteral("--filesystem=") + QFileInfo(env.home + QStringLiteral("/ROMs/snes")).canonicalFilePath() + QStringLiteral(":ro"),
+                                               QStringLiteral("--filesystem=") + kidCfgDir + QStringLiteral(":ro"),
+                                               QStringLiteral("org.libretro.RetroArch"), QStringLiteral("-L"),
+                                               raHome + QStringLiteral("/config/retroarch/cores/snes9x_libretro.so") }));
     QCOMPARE(p.configPath, kidCfgDir + QStringLiteral("/snes.cfg"));
     QVERIFY(!p.configPath.startsWith(raHome));
     QCOMPARE(p.configArgv, (QStringList { QStringLiteral("--filesystem=") + kidCfgDir + QStringLiteral(":ro"),
@@ -345,7 +358,11 @@ void TestSystems::planFlatpakAndNative()
     p = EmulatorLaunch::plan(*gc, *dolphin, rom, QStringLiteral("default"), env);
     QVERIFY(p.ok());
     // M8: Dolphin's user folder per profile, inside its own sandbox data dir.
+    // No ROM folder on disk yet: nothing to mount, the sandbox is strict anyway.
+    // Built-in Dolphin: "sandbox": "app" (GameCube adapter, Wiimotes).
+    QVERIFY(dolphin->appSandbox);
     QCOMPARE(p.argv, (QStringList { tmp.path() + QStringLiteral("/bin/flatpak"), QStringLiteral("run"),
+                                     QStringLiteral("--die-with-parent"),
                                      QStringLiteral("org.DolphinEmu.dolphin-emu"), QStringLiteral("-u"),
                                      tmp.path() + QStringLiteral("/.var/app/org.DolphinEmu.dolphin-emu/data/mightyos/profiles/default"),
                                      QStringLiteral("-b"), QStringLiteral("-e"), rom }));
@@ -390,6 +407,130 @@ void TestSystems::planSteam()
                             QStringLiteral("com.valvesoftware.Steam"), QStringLiteral("-shutdown") }));
     QCOMPARE(EmulatorLaunch::steamShutdownArgv(false, env),
              (QStringList { tmp.path() + QStringLiteral("/bin/steam"), QStringLiteral("-shutdown") }));
+}
+
+void TestSystems::flatpakSandboxArgs()
+{
+    QTemporaryDir tmp;
+    const QString base = QFileInfo(tmp.path()).canonicalFilePath();
+    LaunchEnv env;
+    env.home = base + QStringLiteral("/home/u");
+    env.dataHome = env.home + QStringLiteral("/.local/share");
+    env.stateHome = env.home + QStringLiteral("/.local/state");
+    env.runtimeDir = env.home + QStringLiteral("/ROMs/run");   // pretend: inside the home
+    env.user = QStringLiteral("u");
+    SystemDef system;
+    system.id = QStringLiteral("nes");
+    const QString roms = env.home + QStringLiteral("/ROMs/nes");
+    const QString usb = env.home + QStringLiteral("/USB stick/nes");
+    for (const QString &d : { roms, usb, env.home + QStringLiteral("/odd:dir"), env.home + QStringLiteral("/.config/roms"),
+                              env.runtimeDir, env.home + QStringLiteral("/ROMs/.hidden") })
+        QVERIFY(QDir().mkpath(d));
+    // A symlink to a forbidden place resolves to it and is refused (S2).
+    QVERIFY(QFile::link(env.home + QStringLiteral("/.config"), env.home + QStringLiteral("/ROMs/cfg")));
+    system.romDirs = { roms, usb, roms, env.home + QStringLiteral("/missing"), env.home + QStringLiteral("/odd:dir"),
+                       env.home + QStringLiteral("/.config/roms"), env.home, env.runtimeDir,
+                       env.home + QStringLiteral("/ROMs/.hidden"), env.home + QStringLiteral("/ROMs/cfg"),
+                       QStringLiteral("/usr/share"), QStringLiteral("/tmp"), QStringLiteral("/") };
+    QStringList rejected;
+    const QStringList strict = EmulatorLaunch::flatpakSandboxArgs(system, roms + QStringLiteral("/Game.nes"), true, env, {},
+                                                                  &rejected);
+    QCOMPARE(strict, (QStringList { QStringLiteral("--die-with-parent"), QStringLiteral("--nofilesystem=host:reset"),
+                                               QStringLiteral("--filesystem=/run/udev:ro"),
+                                               QStringLiteral("--nodevice=all"), QStringLiteral("--device=dri"),
+                                               QStringLiteral("--device=input"), QStringLiteral("--nosocket=session-bus"),
+                                               QStringLiteral("--nosocket=system-bus"), QStringLiteral("--nosocket=ssh-auth"),
+                                               QStringLiteral("--nosocket=x11"), QStringLiteral("--nosocket=fallback-x11"),
+                                               QStringLiteral("--unshare=network"),
+                                    QStringLiteral("--filesystem=") + roms + QStringLiteral(":ro"),
+                                    QStringLiteral("--filesystem=") + usb + QStringLiteral(":ro") }));
+    QCOMPARE(rejected.size(), 9);   // all but the two good ones and the missing one
+    QString problem;
+    QVERIFY(EmulatorLaunch::allowedRomDir(env.home, env, &problem).isEmpty());
+    QVERIFY(problem.contains(QLatin1String("home folder")));
+    QVERIFY(EmulatorLaunch::allowedRomDir(env.runtimeDir, env, &problem).isEmpty());
+    QCOMPARE(problem, QStringLiteral("inside XDG_RUNTIME_DIR"));
+    QVERIFY(EmulatorLaunch::allowedRomDir(QStringLiteral("/tmp"), env, &problem).isEmpty());
+    QCOMPARE(EmulatorLaunch::allowedRomDir(roms + QStringLiteral("/../nes"), env, &problem), QString());   // not clean
+    // "sandbox": "app": only the read-only ROM folders.
+    QCOMPARE(EmulatorLaunch::flatpakSandboxArgs(system, roms + QStringLiteral("/Game.nes"), false, env),
+             (QStringList { QStringLiteral("--die-with-parent"),
+                            QStringLiteral("--filesystem=") + roms + QStringLiteral(":ro"),
+                            QStringLiteral("--filesystem=") + usb + QStringLiteral(":ro") }));
+    // A ROM outside every ROM folder: its own folder, if allowed (S2).
+    const QString elsewhere = env.home + QStringLiteral("/Downloads");
+    QVERIFY(QDir().mkpath(elsewhere));
+    system.romDirs = { roms };
+    QCOMPARE(EmulatorLaunch::flatpakSandboxArgs(system, elsewhere + QStringLiteral("/x.nes"), false, env),
+             (QStringList { QStringLiteral("--die-with-parent"),
+                            QStringLiteral("--filesystem=") + roms + QStringLiteral(":ro"),
+                            QStringLiteral("--filesystem=") + elsewhere + QStringLiteral(":ro") }));
+    rejected.clear();
+    QVERIFY(!EmulatorLaunch::flatpakSandboxArgs(system, env.home + QStringLiteral("/.config/roms/x.nes"), false, env, {}, &rejected)
+                 .join(u' ').contains(QLatin1String(".config")));
+    QCOMPARE(rejected.size(), 1);
+    // A prefix that isn't a parent folder doesn't count as covering it.
+    const QString sibling = roms + QStringLiteral("2");
+    QVERIFY(QDir().mkpath(sibling));
+    QVERIFY(EmulatorLaunch::flatpakSandboxArgs(system, sibling + QStringLiteral("/x.nes"), false, env)
+                .contains(QStringLiteral("--filesystem=") + sibling + QStringLiteral(":ro")));
+    // Read-write dirs: only our own.
+    const QString saves = env.dataHome + QStringLiteral("/mightyos/profiles/default/saves/nes");
+    const QStringList rw = EmulatorLaunch::flatpakSandboxArgs(system, roms + QStringLiteral("/G.nes"), true, env,
+                                                              { saves, env.home + QStringLiteral("/Documents") });
+    QVERIFY(rw.contains(QStringLiteral("--filesystem=") + saves));
+    QVERIFY(!rw.join(u' ').contains(QLatin1String("Documents")));
+    // /media, /run/media/<user>, /mnt, /srv are fine too.
+    if (QFileInfo(QStringLiteral("/mnt")).isDir() && QFileInfo(QStringLiteral("/mnt")).canonicalFilePath() == QLatin1String("/mnt"))
+        QVERIFY(EmulatorLaunch::allowedRomDir(QStringLiteral("/mnt"), env, &problem).isEmpty());   // not itself
+}
+
+void TestSystems::sandboxKey()
+{
+    QTemporaryDir tmp;
+    const auto withEmulator = [&](const QJsonObject &emulator) {
+        QJsonObject o = valid();
+        o.insert(QStringLiteral("emulators"), QJsonArray { emulator });
+        return SystemRegistry::parse(json(o), tmp.path());
+    };
+    QJsonObject dolphin { { QStringLiteral("id"), QStringLiteral("d") }, { QStringLiteral("label"), QStringLiteral("D") },
+                          { QStringLiteral("type"), QStringLiteral("flatpak") },
+                          { QStringLiteral("app"), QStringLiteral("org.DolphinEmu.dolphin-emu") },
+                          { QStringLiteral("args"), QJsonArray { QStringLiteral("{rom}") } } };
+    auto def = withEmulator(dolphin);
+    QVERIFY(def);
+    QVERIFY(!def->emulators.constFirst().appSandbox);   // strict by default
+    dolphin.insert(QStringLiteral("sandbox"), QStringLiteral("app"));
+    def = withEmulator(dolphin);
+    QVERIFY(def);
+    QVERIFY(def->emulators.constFirst().appSandbox);   // parse() accepts it...
+    // ...but a user layer may not relax the sandbox (S4).
+    const QString userDir = tmp.path() + QStringLiteral("/config/mightyos/systems.d");
+    QVERIFY(QDir().mkpath(userDir));
+    QJsonObject o = valid();
+    o.insert(QStringLiteral("emulators"), QJsonArray { dolphin });
+    QFile file(userDir + QStringLiteral("/snes.json"));
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(json(o));
+    file.close();
+    SystemRegistry registry;
+    registry.load({ SystemRegistry::kBuiltinDir, userDir }, tmp.path());
+    const SystemDef *snes = registry.find(QStringLiteral("snes"));
+    QVERIFY(snes && snes->source.startsWith(userDir));
+    QVERIFY(!snes->emulators.constFirst().appSandbox);
+    QVERIFY(!SystemRegistry::sandboxLayerTrusted(userDir, userDir + QStringLiteral("/snes.json"), tmp.path()));
+    QVERIFY(SystemRegistry::sandboxLayerTrusted(SystemRegistry::kBuiltinDir, QString(), tmp.path()));
+    registry.load({ SystemRegistry::kBuiltinDir }, tmp.path());
+    QVERIFY(registry.find(QStringLiteral("gamecube"))->emulator(QStringLiteral("dolphin"))->appSandbox);
+    dolphin.insert(QStringLiteral("sandbox"), QStringLiteral("none"));
+    QVERIFY(!withEmulator(dolphin));
+    dolphin.insert(QStringLiteral("sandbox"), true);
+    QVERIFY(!withEmulator(dolphin));
+    const QJsonObject native { { QStringLiteral("id"), QStringLiteral("n") }, { QStringLiteral("label"), QStringLiteral("N") },
+                               { QStringLiteral("type"), QStringLiteral("native") }, { QStringLiteral("program"), QStringLiteral("n") },
+                               { QStringLiteral("args"), QJsonArray { QStringLiteral("{rom}") } },
+                               { QStringLiteral("sandbox"), QStringLiteral("app") } };
+    QVERIFY(!withEmulator(native));   // Flatpak only
 }
 
 QTEST_GUILESS_MAIN(TestSystems)

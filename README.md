@@ -2,7 +2,10 @@
 
 A console-style launcher for Ubuntu with large tiles, built for a TV
 ("10-foot") setup and for keyboard, mouse or gamepad. See `PLAN.md` for the
-full plan. This is milestone **M4, emulators & Steam library**: system
+full plan. Latest milestone: **M6, session** (labwc kiosk session, one
+systemd scope per app, dormant mode, the Guide menu over games, crash
+recovery and safe mode; see "Session"). Before that, M5 added media and
+streaming, and **M4, emulators & Steam library**: system
 definitions (`systems.d`), a ROM scanner with an SQLite cache, launching
 through RetroArch or standalone Flatpak emulators with a per-game emulator
 choice, Steam as a system (`appmanifest_*.acf`, `steam://rungameid`, exit
@@ -19,7 +22,9 @@ time the Qt SVG image plugin is needed for the icons and button glyphs
 (Ubuntu: `libqt6sql6-sqlite`; without it MightyOS runs, just without a cache).
 Optional: `libsecret-1-dev` at build time stores the SteamGridDB API key in
 the Secret Service instead of a 0600 file (`-DMIGHTYOS_WITH_LIBSECRET=OFF`
-forces the file). HDMI-CEC uses the kernel headers
+forces the file). Optional but needed for the Guide menu over a running game
+in the session: `liblayershellqtinterface-dev` (pulls `layer-shell-qt`;
+`-DMIGHTYOS_WITH_LAYERSHELL=OFF` leaves it out), see "Session". HDMI-CEC uses the kernel headers
 (`linux/cec.h`) only; libcec is not used.
 
 ```sh
@@ -47,13 +52,21 @@ QT_QPA_PLATFORM=offscreen ./build/mightyos   # headless smoke test
 ./build/mightyos --no-gamepad --no-cec       # keyboard and mouse only
 ./build/mightyos --fake-cec fifo             # fake TV remote, see "TV remote"
 ./build/mightyos --mock-library              # bundled fake library; games run the test app
+./build/mightyos --safe-mode                 # no artwork downloads, "Safe mode" banner
+./build/mightyos --check-session             # setup warnings, then exit
+./build/mightyos --signal=guide              # what the panic keys run (session only)
+./build/session/mightyos-session             # the whole session (labwc), from a tty
 ./build/mightyos-inputtest --seconds 30      # no GUI: print pads and actions
 ```
 
-The default switches to fullscreen in M6, when MightyOS becomes its own
-session. `--fullscreen` maps the window normally first and goes fullscreen
-after the first frame (cage 0.2.1 / wlroots 0.19 abort on a fullscreen
-request before the surface's first commit). With one profile MightyOS opens straight on Home; with two or more
+Development runs default to a window; `--session-mode` (what `mightyos-session`
+runs, see "Session") is fullscreen. `--fullscreen` maps the window normally
+first and goes fullscreen after the first frame (some wlroots compositors
+abort on a fullscreen request before the surface's first commit).
+`mightyos --check-session` prints warnings about the setup (risky groups,
+autologin, NAutoVTs, whether the installed labwc config is root-owned,
+systemd scopes, layer shell, SysRq, the CEC udev rule, ROM folders Flatpak
+emulators won't get) and works over SSH. With one profile MightyOS opens straight on Home; with two or more
 it asks "Who's playing?" first, with the last used profile preselected.
 Each profile reopens on the screen and tile it left.
 
@@ -230,6 +243,183 @@ requested. With one, grids you open fetch box art in the background (one
 request at a time, about one API call per second, exponential backoff,
 paused while a game runs); failures just leave the tinted tile.
 
+## Session (M6)
+
+MightyOS runs as its own Wayland login session (PLAN D1, D5): **labwc** as a
+locked-down kiosk compositor with MightyOS as its only client.
+
+```
+mightyos-session                    the login session (installed to bin/; may be the login shell)
+  └─ /usr/bin/labwc -C share/mightyos/labwc   rc.xml (generated), menu.xml, environment
+       └─ mightyos-session --run    restart loop (labwc -S), passes --previous-status
+            └─ mightyos --session-mode   fullscreen, crash counter, session lock
+                 └─ systemd-run --user --scope -- <app>   one scope per launch
+```
+
+Why labwc and not cage: cage 0.2.1 (Ubuntu 26.04, wlroots 0.19) aborts
+(`wlr_xdg_surface_schedule_configure: Assertion 'surface->initialized'`,
+cage #456/#471, fixed only in cage 0.3.1 with wlroots 0.20) when a client
+asks for fullscreen before its first commit; Kodi does that and took the
+session down on the test PC. labwc 0.9.3 runs MightyOS and Kodi fine, and
+also gives compositor-level panic keys and layer-shell overlays.
+
+**Install** (`cmake --install build`; use `-DCMAKE_INSTALL_PREFIX=/usr` so
+display managers find the session): `bin/mightyos`, `bin/mightyos-session`,
+`share/wayland-sessions/mightyos.desktop`, `share/mightyos/labwc/` and,
+never applied automatically, `share/mightyos/system/` (below). Install paths
+may only contain `A-Z a-z 0-9 / . _ + -` (configure fails otherwise: they
+end up in quoted shell strings and labwc commands). The script always runs
+`/usr/bin/labwc` with `PATH=/usr/bin:/bin`. `build/session/mightyos-session`
+is the same script for the build tree (build binary, generated
+`build/session/labwc/`; only this one honours `MIGHTYOS_LABWC_DIR=<dir>`
+to try another labwc config).
+
+**Starting it.** Pick "MightyOS" at a display manager's login screen, or
+boot straight into it. Autologin means **anyone at the keyboard is the kiosk
+user, without a password**: use a dedicated kiosk user that `mightyos
+--check-session` doesn't warn about, lock its password (`sudo passwd -l
+KIOSKUSER`) or give it a strong one, and install the logind drop-in (no
+spare text consoles). Recommended, shell-less ways (nothing to fall into
+when the session ends; `mightyos-session` refuses `-c` commands, so `su -c`,
+scp and sftp fail too):
+
+- *Login shell + getty autologin* (no display manager):
+  `echo /usr/bin/mightyos-session | sudo tee -a /etc/shells`,
+  `sudo usermod -s /usr/bin/mightyos-session KIOSKUSER`, then the getty
+  drop-in from `share/mightyos/system/getty/autologin.conf.example`
+  (replace `KIOSKUSER`) and `sudo systemctl daemon-reload`. When the session
+  ends, the login ends and getty starts it again.
+- *greetd*: `share/mightyos/system/greetd/config.toml.example`
+  (`[initial_session] command = "/usr/bin/mightyos-session"`).
+- *GDM / SDDM* autologin also works (`AutomaticLoginEnable=true` /
+  `[Autologin] User=… Session=mightyos.desktop`); the session ending returns
+  to the display manager.
+
+The **dev-box alternative** used on the test PC, a line in `~/.profile`
+that starts the session on tty1, is *not* shell-less: when the session
+ends, the login shell carries on and leaves an interactive shell on tty1
+(with autologin: for anyone at the keyboard). Fine for a development box
+with your own account, not for a kiosk.
+
+The kiosk user should be a plain user: **not** in `sudo`, `video`, `input`,
+`lxd`, `incus-admin`, `docker`, `libvirt` (PLAN D8, D16). MightyOS checks at
+every start: a warning in the log and one toast per new set of such groups
+(never blocks). `adm` / `systemd-journal` are reported by `--check-session`
+as information (they read all logs). CEC access comes from the udev rule
+below instead.
+
+**Panic keys** (labwc keybinds in `rc.xml`; nothing else in the compositor
+moves, closes or switches windows, opens menus or runs programs):
+
+| Keys | Does |
+|---|---|
+| Ctrl+Alt+Home | Guide menu over the running app (same as holding the gamepad's Guide); Home when nothing runs |
+| Ctrl+Alt+End | close the running app now (its scope gets SIGTERM, SIGKILL 3 s later) |
+| Ctrl+Alt+Backspace | leave the session: a standard profile is asked "Leave MightyOS?" (Stay is the default, the TV remote can only cancel); a kids profile gets "Ask a parent"; while an app runs, the Guide menu opens instead |
+
+They run `<bin>/mightyos --signal=guide|close|quit`, which signals only the
+session instance: the process holding the `flock` on
+`$XDG_RUNTIME_DIR/mightyos/session.pid` (0600 in a 0700 dir, written after
+the signal handlers are in place), and only while that pid is still a
+process named `mightyos` of this user. A second MightyOS instance doesn't
+get the lock and never cleans up scopes. A client using the
+keyboard-shortcuts-inhibit protocol (Moonlight while it captures the
+keyboard) also suppresses the keys; the gamepad Guide button always works.
+
+**Guide menu over a game.** Hold Guide (1 s) or press Ctrl+Alt+Home while an
+app runs: Resume (focused; B and Guide resume too) and Close (games and apps
+ask first, Cancel focused; a web app or stream closes at once). A Steam
+launch offers Stop waiting / Back to MightyOS instead; "Back to MightyOS"
+only stops tracking the game, its window stays on top until it is quit. With
+`liblayershellqtinterface-dev` at build time (`layer-shell-qt` at run time)
+the menu is a separate wlr-layer-shell window on the overlay layer above the
+game, created when it opens and destroyed when it closes; it takes the
+keyboard while open and gives it back to the game on Resume, and MightyOS's
+own window stays dormant underneath. Without it the menu is drawn inside
+MightyOS's own window, which the game covers, so in the session Guide then
+falls back to the M5 behaviour (web apps and streams close, Steam stops
+tracking, otherwise a hint after the app exits). The TV remote may open the
+menu and resume, never confirm a Close (PLAN D18); in "full" mode two Home
+presses close a web app or stream ("Press Home again to close" shows in the
+menu). The running game still sees the gamepad while the menu is open
+(MightyOS never grabs devices); games that pause on focus loss (RetroArch's
+default, SDL games) ignore it.
+
+**While an app runs** MightyOS is dormant: 1.5 s after the start its screens
+are hidden, the clock stops, scene-graph caches, unused pixmaps and the
+artwork memory cache are released; only the gamepad thread (Guide) and CEC
+stay awake. Measured on the test PC with RetroArch running: 0 CPU ticks in
+30 s. Every launch runs in its own systemd user scope
+(`app-mightyos-<id>-<random>.scope`; Steam launches
+`app-mightyos.tracked-…`), via `systemd-run --user --scope`, argv only.
+Closing an app signals the scope it is in *now*: `flatpak run <id>` moves
+itself into `app-flatpak-<id>-<n>.scope`, which is accepted only for that
+exact app id; if `systemctl` fails, the process group gets the signal, and
+the SIGKILL escalation looks again (cgroup, `cgroup.kill`, process group).
+If `systemd-run` itself fails, the launch is retried once without a scope
+and scopes stay off for the run. Without a systemd user manager (WSL) apps
+run in their own process group.
+
+**Crash recovery.** The session script restarts MightyOS when it ends with a
+non-zero status and passes `--previous-status=<N>`; 10 quick failures in a
+row end the session. MightyOS counts as a crash a status of 128 or more (a
+signal) or any non-zero status before its window was up (failed startup), in
+`~/.local/state/mightyos/session.json` (0600, boot-relative times; a reboot
+starts afresh). An exit code after startup is not a crash: Qt exits with 1
+when the compositor goes away, i.e. at every logout. 3 crashes within 10
+minutes and it starts in **safe mode**: a "Safe mode" banner, no artwork
+downloads, no image decoding at all (tiles show their vector icons), no
+HDMI-CEC. A clean quit, SIGTERM, SIGINT or SIGHUP (logout) flushes
+navigation state and settings, stops the running app's scope and ends the
+session. The running launch's scopes are recorded in `session.json`; the
+next session instance stops them and any leftover `app-mightyos-*.scope`
+(never `app-mightyos.tracked-*`, a Steam client may still be in use). Core
+dumps of the GUI are off (`RLIMIT_CORE` 0 and not dumpable, so no ptrace by
+other processes of the user either); launched apps get the original core
+limit back.
+
+**Flatpak emulators** run `flatpak run --die-with-parent` in a strict
+sandbox (D30): every filesystem the app asked for is reset; only `/run/udev`
+(read-only), the system's ROM folders (read-only), MightyOS's RetroArch
+config dir (read-only) and a `{saves}` dir in MightyOS's own data dir
+(read-write) are added; GPU and input devices only; no session bus, system
+bus, ssh-agent or X11 sockets; no network. ROM folders are resolved
+(realpath) and must be inside your home folder (not hidden, not the home
+folder itself) or under `/media`, `/run/media/<user>`, `/mnt` or `/srv`;
+`--check-session` lists the ones that aren't passed. Dolphin is built in with
+`"sandbox": "app"` (its own permissions, ROM folders still read-only) for the
+GameCube adapter and Wiimotes; a definition in `~/.config/mightyos/systems.d`
+can't relax the sandbox (only root-owned definitions can). The emulator
+picker shows "full app access" for those.
+
+**Wayland privileges under labwc.** labwc offers every native client the
+wlroots protocols a desktop uses: virtual keyboard and pointer, screencopy,
+layer-shell and foreign-toplevel management. Any app MightyOS starts
+natively (not sandboxed) could therefore inject input into MightyOS, read
+the screen, draw over it or close windows. Flatpak apps get only what their
+Wayland socket allows (the same protocols, as labwc doesn't filter by
+client). M8's PIN and admin password entry must take this into account (see
+PLAN section 4).
+
+**Optional system hardening** (`share/mightyos/system/`, copy deliberately,
+as root):
+
+| File | Install to | Effect |
+|---|---|---|
+| `udev/70-mightyos-cec.rules` | `/etc/udev/rules.d/` | CEC adapters for the seat's user (uaccess, D16), no `video` group needed. Note: every Flatpak with `devices=all` (most do, e.g. Kodi, Chrome) can then use the CEC adapter too |
+| `sysctl.d/90-mightyos-sysrq.conf` | `/etc/sysctl.d/` | `kernel.sysrq = 0` (Ubuntu's 176 lets the keyboard reboot the box) |
+| `logind.conf.d/90-mightyos-vt.conf` | `/etc/systemd/logind.conf.d/` | `NAutoVTs=0`, `ReserveVT=0`: no spare text consoles |
+| `apport/report-ignore/mightyos` | `/etc/apport/report-ignore/` | Apport ignores this build's `mightyos` (generated with the install prefix) |
+| `getty/autologin.conf.example` | `getty@tty1` drop-in | autologin on tty1 into the shell-less session (see above) |
+| `greetd/config.toml.example` | `/etc/greetd/config.toml` | greetd starting the session (see above) |
+
+VT switching: every wlroots compositor (labwc included) switches VTs on
+Ctrl+Alt+F1..F12 and labwc has no setting for it. `mightyos-session` adds
+`srvrkeys:none` to `XKB_DEFAULT_OPTIONS` (keeping options you set), which
+turns those keys into plain F1..F12 (checked with libxkbcommon); with the
+logind drop-in there is also no login on the other VTs. Ctrl+Alt+Delete
+isn't seen by the kernel while the compositor owns the keyboard.
+
 ## Test
 
 ```sh
@@ -239,18 +429,19 @@ cmake --build build --target all_qmllint      # QML lint
 
 | Test | Covers |
 |---|---|
-| `tst_launcher` | environment allowlist, launch/exit/exit code, crash (`--crash` -> -1), launch guards |
+| `tst_launcher` | environment allowlist, launch/exit/exit code, crash (`--crash` -> -1), launch guards, process-group terminate; M6 scopes with fake `systemd-run`/`systemctl`/`flatpak` (unit names incl. tracked, argv after `--`, exit codes through the scope, SIGTERM then SIGKILL by unit, a Flatpak-moved scope of that app only, another app's scope refused, failing `systemctl` falls back to the group, failing `systemd-run` retries unscoped, recorded and stale scopes) and, where a user manager runs, a real scope whose processes ignore SIGTERM |
+| `tst_session` | crash counter (only what the restart loop saw: signals and startup failures, never a logout's exit 1; window, cap, other boots, safe mode after 3, corrupt file moved aside, 0600, symlinks never followed), the session lock (flock, one holder, stale and symlinked pid files, private dir, `--signal` refuses non-MightyOS pids), warned groups and recorded units, risky/informational groups, SignalWatcher, core dumps off and the child's core limit restored, Session dormant / group warning, overlay fallback off Wayland, the generated `rc.xml` files locked down (well-formed, no defaults, Focus/Raise only and exactly the three `mightyos --signal` commands), `mightyos-session` (`sh -n`, refuses commands, the restart loop with a fake labwc and mightyos: `--previous-status`, exit 0 ends it, 10 failures give up) |
 | `tst_inputrouter` | key table (incl. Ctrl+Home / HomePage = Guide), repeat policy, mute window, blocked, cross-thread `postAction` and its pending counter, `guideHeld` bypassing blocked/mute, pad style and device notices, rumble policy (bump once per hold), remote trust levels and restricted contexts, secure entry logs nothing (captured log), device-name sanitising and terminal escaping, mouse back button, text-field passthrough, cursor auto-hide |
 | `tst_navstate` | save/load round trip, corrupt and stale files, path truncation, profile paths, debounce/flush |
 | `tst_tilelistmodel` | model contract (roles, `indexOfKey`/`firstIndexForLetter` after reset, insert, remove, move; `get`; in-place updates), diff-based `setItems` (no reset for added/removed rows, reset fallback for reordering/duplicates), batch insert/remove, letter groups and LT/RT steps, a 20k-row diff, mock Library ids and structure |
 | `tst_keyvalues` | VDF/ACF parser: Steam manifests and library folders, escapes, comments, conditionals, BOM, duplicates, malformed input, size/token/node/depth limits, 100k-deep input without recursion |
-| `tst_systems` | built-in definitions cover the D9 targets, strict rejection (ids, unknown keys, bidi labels, partial/unknown/duplicate placeholders, bad Flatpak ids, relative programs and dirs), whole-element substitution, layers/override/disable, symlinked definitions ignored, RetroArch native/Flatpak/core-missing/not-installed plans, Flatpak and native plans, Steam plans |
+| `tst_systems` | Flatpak sandbox arguments (strict: filesystems reset, GPU + input only, no buses/ssh/X11/network; canonical ROM folders read-only, only allowed roots, symlinks resolved, rejected ones reported; our `{saves}` rw; `"sandbox": "app"` only from trusted layers, Dolphin built in), built-in definitions cover the D9 targets, strict rejection (ids, unknown keys, bidi labels, partial/unknown/duplicate placeholders, bad Flatpak ids, relative programs and dirs), whole-element substitution, layers/override/disable, symlinked definitions ignored, RetroArch native/Flatpak/core-missing/not-installed plans, Flatpak and native plans, Steam plans |
 | `tst_romscanner` | title cleaning, ids, symlinks escaping the root rejected (and inner ones followed, loops broken), FIFOs skipped, depth limit, `.m3u`/`.cue`/"(Disc N)" handling, incremental reuse, launch-time path re-check, SQLite round trip and diff, bad rows and a garbage or symlinked cache file, 20k ROMs (scan, cache, rescan) |
 | `tst_steam` | manifests (installed only, appid checks), tools skipped, sanitised names, root dedup through symlinks, library folders, Flatpak path mapping, old and new librarycache art, registry and process-environment checks, the run tracker (start, lagging registry, exit, timeout) and Launcher hand-over, failure and stopWaiting |
 | `tst_library` | the real Library on temp dirs: models from scan, "+N more", Steam, ids never paths, the cache serving the next start, re-scan as a diff with one debounced `changed`, show all, kids profiles (nothing without allowed.json, then only what it allows), per-profile emulator choice, launching (runs, missing emulator, missing Steam, vanished file), deleting a profile keeps or deletes saves |
 | `tst_scraper` | API key: validation, mask, 0600 file in a 0700 dir, refuses group/other-readable files, symlinked files and dirs; host allowlist, URL building (term is one path segment), JSON parsing of hostile responses, image validation; scraper with a scripted fetcher: no key no requests, full flow with the key only on API calls, Steam by appid, invalid images dropped, 401 stops until a new key, 429/503/offline backoff, negative cache, LRU disk budget and orphan cleanup |
 | `tst_desktopentry` | `Exec=` parsing per the spec (quotes, escapes, `%f %F %u %U %i %c %k %%`, deprecated codes, rejected shell syntax and malformed values), file parsing, locales, lists |
-| `tst_appregistry` | desktop-file-id precedence, Hidden/NoDisplay/TryExec/OnlyShowIn/NotShowIn/Terminal, subdirectory ids, Flatpak ids, icon validation, oversized/broken files, manifests and their validation, async scan, watcher re-scan (incl. a dir created later), no argv in logs |
+| `tst_appregistry` | one tile for an app installed natively and as a Flatpak (whole id or exact name, never part of an id; the Flatpak's; the native one still resolves), desktop-file-id precedence, Hidden/NoDisplay/TryExec/OnlyShowIn/NotShowIn/Terminal, subdirectory ids, Flatpak ids, icon validation, oversized/broken files, manifests and their validation, async scan, watcher re-scan (incl. a dir created later), no argv in logs |
 | `tst_profiles` | first run, create/rename/appearance/kind, delete (with its data) and last-profile protection, startup rule, last-used ordering, invalid ids in the file, corrupt file, failed atomic write, M1 navstate migration |
 | `tst_favorites` | toggle, saved order, move, unavailable targets (and their recovery), per-profile isolation, file validation; history counts, order, per profile, cap |
 | `tst_padinput` | positional button mapping, stick deadzone/hysteresis and dominant axis (1.3x margin; a jittering diagonal never flips), token bucket, trigger hysteresis, repeat timing (350 ms, 90 ms accelerating to 40 ms) with a fake clock, no burst after a stall, D-pad + stick without double steps, Guide press/hold, latching on app start/exit, InputGate: only `guideHeld` while an app runs, Guide = Home, coalescing of queued repeats (a stalled GUI thread doesn't overshoot) |
@@ -259,7 +450,7 @@ cmake --build build --target all_qmllint      # QML lint
 | `tst_cec` | CEC UI command mapping, key names, key message parsing (broadcast key frames dropped), follower replies (OSD name, power, menu, deck status, Feature Abort for unknown directed opcodes, active source only after `<Set Stream Path>` to us, nothing for broadcasts), remote repeat without acceleration, lost release stops scrolling within ~0.5 s, late refresh resumes, Root Menu, latch, the fake backend end to end into InputRouter on a fake clock (deterministic), "only Guide while running", press rate limit, removal notices (device lost, stop), FIFO and runtime-dir checks, no device and non-CEC devices refused, libcec stub |
 | `tst_settings` | defaults, rumble and tvRemote round trips, unknown keys kept, parse errors moved aside, newer versions read but never written, unreadable files left alone, failed writes |
 | `tst_artwork` | icon theme lookup (inheritance, best size, SVG preference, pixmaps), decode at the requested size, memory and disk cache hits, re-decode on change, untrusted specs, async responses |
-| `tst_qml` | Qt Quick Test: `tst_tilerow.qml`, `tst_tilegrid.qml` (edges, bump, hover incl. a scrolled row under a resting cursor, click, wheel, paging, letter jump, icon rasterising), `tst_navstack.qml` (routing, bubbling, inert screens during transitions, system stepping, stable prompts, restoring stale paths, per-category positions), `tst_main.qml` (whole window: blocked while running, focus restore, 300 ms mute, crash toast, modal focus trap, Dialog defaults), `tst_profiles.qml` (picker only with 2+ profiles, last used preselected, switching resets and restores the stack, X toggles favorites that appear in order, reordering, unavailable favorites, a launch fills Recent, create/edit/delete in the picker), `tst_library.qml` (A–Z: typed letters and LT/RT letter steps with the letter badge, letters aren't actions; kids profiles; deleting a profile with saves defaults to keeping them; Settings > Artwork key entry: secure entry, invalid key refused, masked after saving, Esc cancels), `tst_promptbar.qml` (glyph style per device: keys, Xbox, PlayStation, Nintendo by position, remote with named colour keys; every glyph has an accessible name; theme-scaled), and in `tst_main.qml` Guide (Home from anywhere, closes menus/dialogs safely, blocked while running, `guideHeld` then a toast after exit), the Controllers vibration and TV remote toggles (not answerable from the remote), remote navigation-only mode and remote-restricted confirmations, rumble on bumps/errors only after gamepad input, connect/disconnect toasts, every Text in the window is plain text, markup in a device name is shown literally |
+| `tst_qml` | Qt Quick Test: `tst_tilerow.qml`, `tst_tilegrid.qml` (edges, bump, hover incl. a scrolled row under a resting cursor, click, wheel, paging, letter jump, icon rasterising), `tst_navstack.qml` (routing, bubbling, inert screens during transitions, system stepping, stable prompts, restoring stale paths, per-category positions), `tst_main.qml` (whole window: blocked while running, focus restore, 300 ms mute, crash toast, modal focus trap, Dialog defaults), `tst_profiles.qml` (picker only with 2+ profiles, last used preselected, switching resets and restores the stack, X toggles favorites that appear in order, reordering, unavailable favorites, a launch fills Recent, create/edit/delete in the picker), `tst_library.qml` (A–Z: typed letters and LT/RT letter steps with the letter badge, letters aren't actions; kids profiles; deleting a profile with saves defaults to keeping them; Settings > Artwork key entry: secure entry, invalid key refused, masked after saving, Esc cancels), `tst_promptbar.qml` (glyph style per device: keys, Xbox, PlayStation, Nintendo by position, remote with named colour keys; every glyph has an accessible name; theme-scaled), and in `tst_main.qml` Guide (Home from anywhere, closes menus/dialogs safely, blocked while running; held: the Guide menu, B resumes, Close asks with Cancel focused, the remote can only cancel; remote Home in the menu: navigation only never closes, full closes on the second press; dormant while an app runs, the overlay doesn't wake it, focus restored after; the Ctrl+Alt+Home / End / Backspace signals, "Leave MightyOS?" and "Ask a parent"), the Controllers vibration and TV remote toggles (not answerable from the remote), remote navigation-only mode and remote-restricted confirmations, rumble on bumps/errors only after gamepad input, connect/disconnect toasts, every Text in the window is plain text, markup in a device name is shown literally |
 
 Tests run with `XDG_CONFIG_HOME`, `XDG_STATE_HOME`, `XDG_DATA_HOME`,
 `XDG_CACHE_HOME` and `XDG_DATA_DIRS` under `build/test-xdg/`, which a ctest
@@ -486,18 +677,16 @@ line per controller change and per action:
 6. **Guide while a game runs.** `./build/mightyos-inputtest --seconds 20 --running`:
    no button prints anything (A and the D-pad included); hold Guide for 1 s:
    `guideHeld source=Gamepad` once per hold.
-7. **Visual test** (once cage is installed: `sudo apt install cage`). On
-   tty1, logged in as the test user:
-   `cage -- ~/mightyos-dev/build/mightyos --fullscreen`. Check that the
+7. **Visual test** in the session (see "Session"). On tty1, logged in as
+   the test user: `~/mightyos-dev/build/session/mightyos-session`. Check that the
    prompt bar shows Xbox glyphs (green A, red B, ...) after the first pad
    press and key caps after a key press; that LB/RB switch categories,
    Guide goes to Home > Favorites from a game grid, and the end of a row
    bumps with a short rumble (once per hold, not on every repeat);
    Settings > Controllers lists the pad, turns vibration off and on and
-   switches the TV remote level; launching a game (mock: the test app) and holding
-   Guide there shows "The Guide menu ... arrives in M6" after closing it.
-   To stop it (cage has no quit key and MightyOS no quit action yet),
-   switch to another VT with Ctrl+Alt+F2, log in and run `pkill -x cage`.
+   switches the TV remote level; launching a game and holding Guide there
+   (or Ctrl+Alt+Home) opens the Guide menu over it (needs layer-shell-qt).
+   Ctrl+Alt+Backspace asks "Leave MightyOS?" and leaves the session.
 8. **Remote without hardware.** `printf 'up\n+right\n' | ./build/mightyos-inputtest --fake-cec --seconds 3`:
    `Navigate up`, `Navigate right repeat=no`, then `repeat=yes` lines
    (source=Remote). `printf 'red\nyellow\n' | ./build/mightyos-inputtest --fake-cec --seconds 2`
@@ -511,10 +700,20 @@ CMakeLists.txt
 data/mock/library.json  mock systems + games (tests, --mock-library)
 data/systems.d/      default system definitions (built in and installed)
 docs/ui-mockups.md   screen mockups and focus maps
+session/             mightyos-session.in (the one shell script), mightyos.desktop.in,
+                     labwc/ (rc.xml.in, menu.xml, environment), system/ (optional hardening,
+                     autologin examples)
 src/                 C++, static library mightyos_core = QML module MightyOS.Core
   main.cpp           CLI, engine, image provider, attaches InputRouter to the window,
                      starts (and joins on quit) the gamepad and CEC threads
-  launcher.{h,cpp}   runs one app at a time (QProcess, clean env, own session)
+  launcher.{h,cpp}   runs one app at a time (QProcess, clean env, own session,
+                     systemd user scope; terminate by scope or process group)
+  session.{h,cpp}    Session singleton: session/safe mode, dormant, Guide overlay state
+  sessionstate.{h,cpp} crash counter, recorded units, group check (session.json);
+                     SessionLock: the flock()ed pid file and `--signal`
+  signalwatcher.{h,cpp} SIGTERM/INT/HUP/USR1/USR2 into the event loop (self-pipe)
+  processhardening.{h,cpp} no core dumps / not dumpable; children get the core limit back
+  guideoverlayhost.{h,cpp} the layer-shell Guide overlay window (LayerShellQt, optional)
   inputrouter.{h,cpp} key/mouse -> actions, repeat policy, mute/blocked,
                      thread-safe post*(), lastSource, gamepadStyle, guideHeld,
                      rumble policy, cursor auto-hide
@@ -563,6 +762,7 @@ qml/                 static library mightyos_ui = QML module MightyOS.UI
   Tile, TileRow, TileGrid, CategoryBar, FocusRing, PointerArea, WheelStepper
   PromptBar, ButtonGlyph (+ Glyphs.js: per-device glyphs), Breadcrumb, InfoHeader, ContextMenu, Dialog, Toast, Clock,
   LaunchOverlay, Icon (+ Icons.js shared icon table), Theme (singleton)
+  GuideMenu, GuideOverlay  the Guide menu over a running app (in-window / layer-shell window)
   Catalog.js         fixed Home categories and Store/Settings sections
 testapp/             mightyos-testapp, stand-in launch target (--quit-after, --exit-code, --crash)
 tools/inputtest.cpp  mightyos-inputtest: prints pads, remote and actions (no GUI)
@@ -570,7 +770,9 @@ tests/               tst_launcher, tst_inputrouter, tst_navstate, tst_tilelistmo
                      tst_desktopentry, tst_appregistry, tst_profiles, tst_favorites,
                      tst_artwork, tst_padinput, tst_padhub, tst_gamepadservice, tst_cec,
                      tst_settings, tst_keyvalues, tst_systems, tst_romscanner, tst_steam,
-                     tst_library, tst_scraper, tst_qml + qml/
+                     tst_library, tst_scraper, tst_webapps, tst_moonlight, tst_media,
+                     tst_session, tst_qml + qml/; fakesystemd.cpp (fake systemd-run, systemctl,
+                     flatpak, labwc, mightyos)
 ```
 
 ### Input pipeline

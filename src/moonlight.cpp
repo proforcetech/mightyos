@@ -335,7 +335,7 @@ LaunchPlan planStream(const QString &hostId, const QString &app, bool preferFlat
     const QString native = env.findProgram(QStringLiteral("moonlight"));
     const bool flatpak = !env.flatpakProgram().isEmpty() && env.flatpakInstalled(kFlatpakId);
     if (flatpak && (preferFlatpak || native.isEmpty()))
-        p.argv = { env.flatpakProgram(), QStringLiteral("run"), kFlatpakId };
+        p.argv = { env.flatpakProgram(), QStringLiteral("run"), QStringLiteral("--die-with-parent"), kFlatpakId };
     else if (!native.isEmpty())
         p.argv = { native };
     else {

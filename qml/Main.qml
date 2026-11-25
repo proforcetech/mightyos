@@ -13,18 +13,36 @@ import MightyOS.Core
 //
 // Guide (Guide button, Ctrl+Home, the remote's Home/Root Menu) answers
 // an open dialog or menu with its safe default (as Back does) and returns
-// to Home > Favorites. Held while an app runs it becomes
-// InputRouter.guideHeld:
-//  - a Steam launch (tracked): stop waiting for / tracking the game,
-//  - a web app (kiosk browser) or Moonlight stream: close it
-//    (Launcher.terminate(): SIGTERM to its process group, SIGKILL 3 s
-//    later). These have no exit a gamepad or TV remote reaches and no
-//    unsaved state. The TV remote (lower trust, PLAN D18/D25) may only do
-//    it in "full" mode and with two Home presses within 1.5 s (the first
-//    arms it: "Press Home again to close"); in "navigation only" mode it
-//    can't close apps at all,
-//  - anything else: logged and mentioned in a toast after the app exits
-//    (the Guide overlay of M6).
+// to Home > Favorites. While an app runs, Guide *held* (InputRouter.guideHeld;
+// gamepad: 1 s, PLAN D25) or the labwc panic key Ctrl+Alt+Home (SIGUSR1 ->
+// Session.guideRequested) opens the Guide menu (GuideMenu: Resume / Close,
+// or Stop waiting / Back to MightyOS for a Steam launch):
+//  - in the layer-shell overlay window over the app when available
+//    (Session.overlayAvailable, GuideOverlay),
+//  - else inside this window, but only if this window can be seen (it is
+//    active or not fullscreen); otherwise the M5 behaviour stays: a Steam
+//    launch stops tracking, a web app / stream closes, anything else gets
+//    a hint after it exits.
+// While it is open, input is unblocked and routed to the menu; Back and
+// Guide resume. Close of a game asks first; a web app or Moonlight stream
+// (no unsaved state, D25) closes at once (Launcher.terminate(): its systemd
+// scope or process group, SIGKILL 3 s later). The TV remote (lower trust,
+// D18/D25) can open the menu and resume; it closes only a web app / stream,
+// only in "full" mode and with two Home presses within 1.5 s (the first
+// arms it: "Press Home again to close", shown in the menu).
+// Ctrl+Alt+End (SIGUSR2 -> Session.closeRequested) closes the running app
+// at once, for apps that hang. Ctrl+Alt+Backspace (SIGRTMIN+1 ->
+// Session.quitRequested) asks "Leave MightyOS?" in a standard profile (the
+// remote can only cancel), says "Ask a parent" in a kids profile, and opens
+// the Guide menu while an app runs (close it first).
+//
+// Dormant (Session.dormant): 1.5 s after an app started, while this window
+// has nothing to show (the Guide menu is closed or in its own overlay
+// window), the screens are hidden, the clock stops and caches are released;
+// the first frame after the app exits draws them again.
+//
+// Safe mode (Session.safeMode, after repeated crashes in the session): a
+// banner in the top bar, no artwork downloads.
 //
 // Profiles: with exactly one profile MightyOS goes straight to Home; with
 // 2+ the picker is shown first, the last used profile preselected.
@@ -53,8 +71,16 @@ Window {
     property bool remoteCloseArmed: false
 
     readonly property bool modalOpen: dialog.open || contextMenu.open || picker.open
-    // Guide was held during the current launch (no overlay before M6).
+    // Guide was held during the current launch while no menu could be shown.
     property bool guideHeldWhileRunning: false
+    // The Guide menu over the running app (overlay window or in-window).
+    property bool guideOpen: false
+    // The overlay window's menu while it exists (GuideOverlay sets it).
+    property GuideMenu overlayMenu: null
+    readonly property GuideMenu activeGuideMenu: overlayMenu ?? inWindowGuide
+    property double launchStartedAt: 0
+    // Nothing of ours to draw while the app runs (see the header).
+    property bool dormant: false
     // Who asked for the open context menu (the NavStack or the picker).
     property Item _menuOwner: null
 
@@ -83,12 +109,14 @@ Window {
 
     Binding { target: Theme; property: "windowWidth"; value: window.width }
     Binding { target: Theme; property: "windowHeight"; value: window.height }
-    Binding { target: InputRouter; property: "blocked"; value: Launcher.running }
+    Binding { target: InputRouter; property: "blocked"; value: Launcher.running && !window.guideOpen }
     Binding { target: InputRouter; property: "cursorHideDelay"; value: Theme.cursorHideDelay }
     Binding { target: InputRouter; property: "rumbleEnabled"; value: Settings.rumble }
     Binding { target: Library; property: "showAllSystems"; value: Settings.showAllSystems }
-    // No artwork downloads while a game runs (bandwidth, CPU).
-    Binding { target: Scraper; property: "paused"; value: Launcher.running }
+    // No artwork downloads while a game runs (bandwidth, CPU), nor in safe mode.
+    Binding { target: Scraper; property: "paused"; value: Launcher.running || Session.safeMode }
+    Binding { target: Session; property: "guideOpen"; value: window.guideOpen }
+    Binding { target: Session; property: "dormant"; value: window.dormant }
     // PLAN D18: TV remote trust level, and the contexts it may only cancel.
     Binding {
         target: InputRouter; property: "remoteMode"
@@ -99,6 +127,7 @@ Window {
         target: InputRouter; property: "acceptRemote"
         value: !(dialog.open && !dialog.acceptsRemote)
                && !(navStack.current && !navStack.current.acceptsRemote)
+               && !(window.guideOpen && !window.activeGuideMenu.acceptsRemote)
     }
     Binding {
         target: InputRouter; property: "secureEntry"
@@ -123,6 +152,18 @@ Window {
     }
 
     function route(action: int, arg: string) {
+        if (window.guideOpen) {
+            if (action === InputRouter.Guide) {
+                // The remote's second Home on an armed closable launch.
+                if (window.remoteCloseArmed && InputRouter.lastSource === InputRouter.Remote)
+                    guideCloseApp()
+                else
+                    closeGuide()
+            } else {
+                window.activeGuideMenu.handleAction(action, arg)
+            }
+            return
+        }
         if (action === InputRouter.Guide) {
             goHome()
             return
@@ -156,6 +197,77 @@ Window {
         }
     }
 
+    // Opens the Guide menu over the running app. False if no menu can be
+    // seen (no layer shell and this window is covered).
+    function openGuide(): bool {
+        if (!Launcher.running)
+            return false
+        if (window.guideOpen)
+            return true
+        // The overlay window registers its menu (overlayMenu) while it is
+        // created, so the in-window menu never opens underneath.
+        if (Session.overlayAvailable && Session.showOverlay()) {
+            window.guideOpen = true
+            InputRouter.muteFor(250)       // the hold's release, stray presses
+            SoundFx.play(SoundFx.Accept)
+            return true
+        }
+        if (window.active || window.visibility !== Window.FullScreen) {
+            window.guideOpen = true
+            InputRouter.muteFor(250)
+            SoundFx.play(SoundFx.Accept)
+            return true
+        }
+        return false
+    }
+
+    function closeGuide() {
+        if (!window.guideOpen)
+            return
+        window.guideOpen = false
+        remoteCloseTimer.stop()
+        window.remoteCloseArmed = false
+        Session.hideOverlay()
+    }
+
+    function guideCloseApp() {
+        const tracked = Launcher.tracked
+        closeGuide()
+        if (tracked)
+            Launcher.stopTracking()
+        else
+            window.launchClosedByGuide = Launcher.terminate()
+    }
+
+    function guideStopTracking() {
+        closeGuide()
+        Launcher.stopTracking()
+    }
+
+    // Guide held while nothing can show the menu: the M5 behaviour.
+    function _guideHeldCovered(source: int) {
+        if (Launcher.tracked) {
+            Launcher.stopTracking()
+            return
+        }
+        if (window.launchClosable) {
+            if (source === InputRouter.Remote) {
+                if (Settings.tvRemote !== "full")
+                    return
+                if (!window.remoteCloseArmed) {
+                    window.remoteCloseArmed = true
+                    remoteCloseTimer.restart()
+                    return
+                }
+            }
+            remoteCloseTimer.stop()
+            window.remoteCloseArmed = false
+            window.launchClosedByGuide = Launcher.terminate()
+            return
+        }
+        window.guideHeldWhileRunning = true
+    }
+
     function launch(item: var) {
         if (Launcher.running)
             return   // never clobber the running app's launch state
@@ -182,6 +294,7 @@ Window {
         launchTitle = item.title
         launchIcon = item.icon
         launchStarted = false
+        launchStartedAt = 0
         guideHeldWhileRunning = false
         launchClosable = isMedia
         launchClosedByGuide = false
@@ -259,7 +372,25 @@ Window {
             enterProfile(ProfileService.activeId)
     }
 
+    // "Leave MightyOS?": Stay is the default and Back; the TV remote can
+    // only cancel (D18). Leaving ends the session (with autologin it
+    // starts again).
+    function confirmQuit() {
+        dialog.show({
+            title: qsTr("Leave MightyOS?"),
+            message: qsTr("This ends the session."),
+            buttons: [{ id: "stay", label: qsTr("Stay") },
+                      { id: "leave", label: qsTr("Leave"), destructive: true }],
+            acceptsRemote: false,
+            onFinished: (answer) => {
+                if (answer === "leave")
+                    Session.quit()
+            }
+        })
+    }
+
     function _returnFromLaunch() {
+        closeGuide()
         launchClosable = false
         remoteCloseArmed = false
         if (launchScreen && launchScreen === navStack.current && launchState)
@@ -274,35 +405,72 @@ Window {
             window.route(action, arg)
         }
         function onGuideHeld(source) {
-            // InputRouter logs it (mightyos.input); the overlay is M6.
-            // A Steam launch (tracked): Guide gives the screen back, whether
-            // the game was seen or not (the heuristics can be wrong).
-            if (Launcher.tracked) {
-                Launcher.stopTracking()
+            // InputRouter logs it (mightyos.input).
+            if (!Launcher.running)
+                return
+            const remote = source === InputRouter.Remote
+            // D25: the remote's first Home on a closable launch arms "Press
+            // Home again to close" (full mode only).
+            const arm = remote && window.launchClosable && Settings.tvRemote === "full" && !Launcher.tracked
+            if (window.guideOpen) {
+                // Delivered as guideHeld (the input thread still saw the app
+                // running): a second press.
+                if (remote && window.remoteCloseArmed)
+                    window.guideCloseApp()
+                else
+                    window.closeGuide()
                 return
             }
-            if (Launcher.running && window.launchClosable) {
-                if (source === InputRouter.Remote) {
-                    if (Settings.tvRemote !== "full")
-                        return   // navigation only: the remote can't close apps
-                    if (!window.remoteCloseArmed) {
-                        window.remoteCloseArmed = true
-                        remoteCloseTimer.restart()
-                        return
-                    }
+            if (window.openGuide()) {
+                if (arm) {
+                    window.remoteCloseArmed = true
+                    remoteCloseTimer.restart()
                 }
-                remoteCloseTimer.stop()
-                window.remoteCloseArmed = false
-                window.launchClosedByGuide = Launcher.terminate()
                 return
             }
-            if (Launcher.running)
-                window.guideHeldWhileRunning = true
+            window._guideHeldCovered(source)
         }
         function onDeviceChanged(connected, name, source, initial) {
             if (initial || Launcher.running)
                 return
             toast.show(connected ? qsTr("%1 connected").arg(name) : qsTr("%1 disconnected").arg(name), false)
+        }
+    }
+
+    Connections {
+        target: Session
+        // Ctrl+Alt+Home / the Home media key (labwc keybind -> SIGUSR1).
+        function onGuideRequested() {
+            if (!Launcher.running)
+                window.route(InputRouter.Guide, "")
+            else if (window.guideOpen)
+                window.closeGuide()
+            else if (!window.openGuide())
+                window._guideHeldCovered(InputRouter.Keyboard)
+        }
+        // Ctrl+Alt+End (SIGUSR2): close the running app now.
+        function onCloseRequested() {
+            if (Launcher.running)
+                window.guideCloseApp()
+        }
+        // Ctrl+Alt+Backspace (SIGRTMIN+1): leave the session, if allowed.
+        function onQuitRequested() {
+            if (Library.restricted) {
+                toast.show(qsTr("Ask a parent to leave MightyOS"), false)
+                return
+            }
+            if (Launcher.running) {
+                if (!window.openGuide())
+                    window._guideHeldCovered(InputRouter.Keyboard)
+                return
+            }
+            window.confirmQuit()
+        }
+        function onOverlayChanged() {
+            // The overlay window went away underneath us (compositor closed
+            // it, creation failed): don't leave input routed to nothing.
+            if (window.guideOpen && Session.overlayAvailable && !Session.overlayShown && window.overlayMenu === null)
+                window.closeGuide()
         }
     }
 
@@ -318,6 +486,7 @@ Window {
         target: Launcher
         function onLaunched(id) {
             window.launchStarted = true
+            window.launchStartedAt = Date.now()
             History.record(id)             // only successful launches count
         }
         function onExited(id, exitCode) {
@@ -336,7 +505,7 @@ Window {
             else if (exitCode !== 0)
                 toast.show(qsTr("%1 exited with code %2").arg(window.launchTitle).arg(exitCode), true)
             else if (guideHeld)
-                toast.show(qsTr("The Guide menu (resume / close a game) arrives in M6"), false)
+                toast.show(qsTr("The Guide menu over games needs layer-shell-qt (see the README)"), false)
         }
         function onFailed(id, error) {
             if (Launcher.running)
@@ -346,10 +515,40 @@ Window {
         }
     }
 
+    // Acknowledged (not shown again for this group set) only once shown.
+    function _showGroupWarning() {
+        toast.show(qsTr("This user is in the %1 group. A MightyOS TV user shouldn't be (see the README).")
+                   .arg(Session.riskyGroups.join(", ")), false)
+        Session.acknowledgeGroupWarning()
+    }
+    Timer {
+        id: groupWarningTimer
+        interval: Theme.toastDuration + 500
+        onTriggered: window._showGroupWarning()
+    }
+
     Timer {
         id: remoteCloseTimer
         interval: 1500
         onTriggered: window.remoteCloseArmed = false
+    }
+
+    // Dormant 1.5 s after the app started (the launch overlay has faded,
+    // the app's window is up), awake at once when it exits or Guide opens.
+    readonly property bool _dormantWanted: Launcher.running && window.launchStarted
+                                           && !(window.guideOpen && window.overlayMenu === null)
+    on_DormantWantedChanged: {
+        if (_dormantWanted) {
+            dormantTimer.restart()
+        } else {
+            dormantTimer.stop()
+            window.dormant = false
+        }
+    }
+    Timer {
+        id: dormantTimer
+        interval: 1500
+        onTriggered: window.dormant = window._dormantWanted
     }
 
     // (f) The minute timer may be far off after suspend or a long game.
@@ -359,6 +558,13 @@ Window {
     }
 
     Component.onCompleted: {
+        if (Session.safeMode) {
+            toast.show(qsTr("Safe mode: MightyOS restarted after repeated crashes. Artwork and the TV remote are off."), true)
+            if (Session.groupWarning)
+                groupWarningTimer.start()   // after the safe-mode toast
+        } else if (Session.groupWarning) {
+            window._showGroupWarning()
+        }
         // A kids profile used last starts directly: the picker would let
         // anyone leave it without the PIN.
         if (ProfileService.pickerAtStartup && ProfileService.active.kind !== "kids")
@@ -412,6 +618,7 @@ Window {
                 id: topBar
                 anchors { left: parent.left; right: parent.right; top: parent.top }
                 height: Math.max(breadcrumb.implicitHeight, clock.implicitHeight)
+                visible: !window.dormant
 
                 Breadcrumb {
                     id: breadcrumb
@@ -434,8 +641,33 @@ Window {
                             window.openProfilePicker()
                     }
                 }
+                Rectangle {
+                    id: safeModeBanner
+                    objectName: "safeModeBanner"
+                    visible: Session.safeMode
+                    anchors.right: profileChip.visible ? profileChip.left : clock.left
+                    anchors.rightMargin: Theme.spacingL
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: safeModeLabel.implicitWidth + 2 * Theme.spacingM
+                    height: safeModeLabel.implicitHeight + Theme.spacingS
+                    radius: height / 2
+                    color: Theme.surfaceHigh
+                    border.width: Math.max(1, Theme.px(3))
+                    border.color: Theme.danger
+                    Text {
+                        id: safeModeLabel
+                        textFormat: Text.PlainText
+                        anchors.centerIn: parent
+                        text: qsTr("Safe mode")
+                        color: Theme.text
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSmall
+                        font.weight: Font.DemiBold
+                    }
+                }
                 Clock {
                     id: clock
+                    active: !window.dormant
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     // PLAN section 3: the clock area opens the quick panel.
@@ -469,7 +701,7 @@ Window {
                     moonlight: moonlightScreen,
                     mediasettings: mediaSettingsScreen
                 })
-                visible: !picker.open
+                visible: !picker.open && !window.dormant
                 focusShown: !window.modalOpen && !Launcher.running
                 onLaunchRequested: (item) => window.launch(item)
                 onToastRequested: (message, isError) => toast.show(message, isError)
@@ -547,6 +779,7 @@ Window {
         LaunchOverlay {
             anchors.fill: parent
             active: Launcher.running
+            guideAvailable: Session.overlayAvailable
             launching: !window.launchStarted
             waiting: Launcher.waiting
             tracked: Launcher.tracked
@@ -554,6 +787,25 @@ Window {
             remoteCloseArmed: window.remoteCloseArmed
             title: window.launchTitle
             iconName: window.launchIcon
+        }
+
+        // The in-window Guide menu (no layer shell); above everything.
+        GuideMenu {
+            id: inWindowGuide
+            objectName: "guideMenu"
+            anchors.fill: parent
+            z: 10
+            open: window.guideOpen && window.overlayMenu === null
+            title: window.launchTitle
+            iconName: window.launchIcon
+            closable: window.launchClosable
+            tracked: Launcher.tracked
+            waiting: Launcher.waiting
+            remoteCloseArmed: window.remoteCloseArmed
+            startedAt: window.launchStartedAt
+            onResumeRequested: window.closeGuide()
+            onCloseRequested: window.guideCloseApp()
+            onStopTrackingRequested: window.guideStopTracking()
         }
     }
 }

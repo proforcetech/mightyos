@@ -1,0 +1,120 @@
+<?xml version="1.0"?>
+<!--
+  MightyOS kiosk configuration for labwc 0.9 (PLAN D5, D28, M6).
+  Generated from session/labwc/rc.xml.in at build time.
+
+  labwc runs MightyOS as its only session client (mightyos-session). Every
+  window is borderless and maximized; MightyOS and the apps it launches go
+  fullscreen themselves. Nothing here lets a keyboard or mouse user move,
+  resize, minimize or close windows, open compositor menus, switch windows
+  or start programs, with three deliberate exceptions (the panic keys):
+
+    Ctrl+Alt+Home   Guide menu over the running app (Resume / Close),
+                    the same as holding the gamepad's Guide button.
+    Ctrl+Alt+End    Close the running app now (MightyOS stops its scope:
+                    SIGTERM, SIGKILL 3 s later). For an app that hangs where
+                    the overlay can't be reached.
+    Ctrl+Alt+BkSp   Leave the session, decided by MightyOS: a standard
+                    profile is asked to confirm, a kids profile gets "Ask a
+                    parent". labwc never exits on its own.
+
+  Each runs MightyOS itself with the signal option (guide, close, quit),
+  by absolute path, with execvp and no shell. That signals only the session
+  instance: the one holding the lock on its pid file in XDG_RUNTIME_DIR,
+  and only while that pid is still a MightyOS process of this user.
+
+  Defaults matter: labwc loads its default keybinds (Alt+Tab, Alt+F4,
+  Super+Return terminal, ...) when no keybind exists, and its default
+  mousebinds (Super+drag move/resize, root menu on click, titlebar
+  actions) when no mousebind exists. Both sections below are complete
+  replacements; never add a default element. An XML error here makes labwc
+  fall back to those defaults (tst_session parses this file).
+
+  Not configurable in labwc: Ctrl+Alt+F1..F12 VT switching (handled with
+  XKB_DEFAULT_OPTIONS=srvrkeys:none in mightyos-session) and clients that
+  use the keyboard-shortcuts-inhibit protocol (e.g. Moonlight while it
+  captures the keyboard), which also suppresses the panic keys; the gamepad
+  Guide button always works (MightyOS reads pads itself).
+-->
+<labwc_config>
+  <core>
+    <decoration>client</decoration>
+    <gap>0</gap>
+    <adaptiveSync>no</adaptiveSync>
+    <xwaylandPersistence>no</xwaylandPersistence>
+    <!-- No middle-click paste between apps. -->
+    <primarySelection>no</primarySelection>
+  </core>
+
+  <placement>
+    <policy>center</policy>
+  </placement>
+
+  <theme>
+    <keepBorder>no</keepBorder>
+    <maximizedDecoration>none</maximizedDecoration>
+    <cornerRadius>0</cornerRadius>
+    <dropShadows>no</dropShadows>
+  </theme>
+
+  <!-- No window switcher: nothing binds NextWindow, and no OSD if it ever runs. -->
+  <windowSwitcher preview="no" outlines="no">
+    <osd show="no" />
+  </windowSwitcher>
+
+  <resize>
+    <popupShow>Never</popupShow>
+  </resize>
+
+  <focus>
+    <followMouse>no</followMouse>
+    <raiseOnFocus>yes</raiseOnFocus>
+  </focus>
+
+  <snapping>
+    <range inner="0" outer="0" />
+    <overlay enabled="no" />
+    <topMaximize>no</topMaximize>
+  </snapping>
+
+  <!-- One workspace, no workspace OSD. -->
+  <desktops number="1" popupTime="0" />
+
+  <keyboard>
+    <keybind key="C-A-Home">
+      <action name="Execute" command="@MIGHTYOS_SESSION_MIGHTYOS@ --signal=guide" />
+    </keybind>
+    <keybind key="C-A-End">
+      <action name="Execute" command="@MIGHTYOS_SESSION_MIGHTYOS@ --signal=close" />
+    </keybind>
+    <keybind key="C-A-BackSpace">
+      <action name="Execute" command="@MIGHTYOS_SESSION_MIGHTYOS@ --signal=quit" />
+    </keybind>
+  </keyboard>
+
+  <mouse>
+    <!-- Clicking a window focuses it; nothing else (no move, resize,
+         titlebar or root-menu bindings). -->
+    <context name="Client">
+      <mousebind button="Left" action="Press">
+        <action name="Focus" />
+        <action name="Raise" />
+      </mousebind>
+      <mousebind button="Right" action="Press">
+        <action name="Focus" />
+        <action name="Raise" />
+      </mousebind>
+    </context>
+  </mouse>
+
+  <windowRules>
+    <!-- Every window: no server-side decorations, maximized, not movable. -->
+    <windowRule identifier="*" serverDecoration="no" fixedPosition="yes">
+      <action name="Maximize" />
+    </windowRule>
+  </windowRules>
+
+  <menu>
+    <showIcons>no</showIcons>
+  </menu>
+</labwc_config>

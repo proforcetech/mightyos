@@ -154,11 +154,21 @@ ArtworkProvider::~ArtworkProvider()
     m_pool.waitForDone();
 }
 
-void ArtworkProvider::install(QQmlEngine *engine)
+ArtworkProvider *ArtworkProvider::install(QQmlEngine *engine)
 {
     // QIcon's theme name is only safe to read on the GUI thread.
     IconLocator::setSharedThemeName(QIcon::themeName());
-    engine->addImageProvider(QStringLiteral("art"), new ArtworkProvider);
+    auto *provider = new ArtworkProvider;
+    engine->addImageProvider(QStringLiteral("art"), provider);
+    return provider;
+}
+
+qsizetype ArtworkProvider::trimMemory()
+{
+    QMutexLocker locker(&m_mutex);
+    const qsizetype bytes = m_memory.totalCost();
+    m_memory.clear();
+    return bytes;
 }
 
 QString ArtworkProvider::defaultCacheDir()
@@ -239,6 +249,8 @@ QImage ArtworkProvider::load(const QString &spec, const QSize &requestedSize, QS
             *error = why;
         return QImage();
     };
+    if (m_disabled.load())
+        return failed(QStringLiteral("safe mode"));
     const QSize target = bucketSize(requestedSize);
     const QString path = resolve(spec, qMax(target.width(), target.height()), error);
     if (path.isEmpty())

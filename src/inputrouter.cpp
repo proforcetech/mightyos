@@ -83,6 +83,23 @@ void InputRouter::attachToWindow(QWindow *window)
     }
 }
 
+void InputRouter::addWindow(QWindow *window)
+{
+    m_extraWindows.removeAll(nullptr);
+    if (!window || window == m_window || m_extraWindows.contains(window))
+        return;
+    m_extraWindows.append(window);
+    window->installEventFilter(this);
+}
+
+void InputRouter::removeWindow(QWindow *window)
+{
+    if (!window || !m_extraWindows.contains(window))
+        return;
+    m_extraWindows.removeAll(window);
+    window->removeEventFilter(this);
+}
+
 InputRouter::KeyBinding InputRouter::keyActionFor(int key, Qt::KeyboardModifiers modifiers)
 {
     // Keypad arrows/Enter carry KeypadModifier, which changes nothing.
@@ -376,7 +393,10 @@ bool InputRouter::focusWantsText() const
 
 bool InputRouter::eventFilter(QObject *watched, QEvent *event)
 {
-    if (watched != m_window)
+    const bool ours = watched && (watched == m_window.data()
+        || std::any_of(m_extraWindows.cbegin(), m_extraWindows.cend(),
+                       [watched](const QPointer<QWindow> &w) { return w.data() == watched; }));
+    if (!ours)
         return QObject::eventFilter(watched, event);
 
     switch (event->type()) {

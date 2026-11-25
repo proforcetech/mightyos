@@ -44,6 +44,7 @@ private slots:
     void startupCache();
     void startupCacheIsValidated();
     void sortUsesSortKey();
+    void flatpakShadowsTheNativeApp();
 
 private:
     void write(const QString &path, const QByteArray &data);
@@ -491,6 +492,48 @@ void TestAppRegistry::sortUsesSortKey()
     for (const AppInfo &app : result.apps)
         ids << app.id;
     QCOMPARE(ids, (QStringList { u"desktop:a"_s, u"desktop:b"_s, u"desktop:e"_s, u"desktop:z"_s }));
+}
+
+void TestAppRegistry::flatpakShadowsTheNativeApp()
+{
+    // M6: Kodi installed natively and as a Flatpak (the test PC): one tile.
+    const auto app = [](const char *id, const char *title) {
+        AppInfo a;
+        a.id = QString::fromLatin1(id);
+        a.title = QString::fromLatin1(title);
+        return a;
+    };
+    const QSet<QString> shadowed = AppRegistry::shadowedApps({
+        app("desktop:kodi", "Kodi"), app("flatpak:tv.kodi.Kodi", "Kodi"),
+        app("desktop:jellyfinmediaplayer", "Jellyfin Media Player"),
+        app("flatpak:com.github.iwalton3.jellyfin-media-player", "Jellyfin Media Player"),
+        app("desktop:org.mozilla.firefox", "Firefox"), app("flatpak:org.mozilla.firefox", "Firefox"),
+        app("desktop:vlc", "VLC"), app("app:kodi", "Kodi manifest"), app("desktop:retroarch", "RetroArch"),
+    });
+    QCOMPARE(shadowed, (QSet<QString> { QStringLiteral("desktop:kodi"), QStringLiteral("desktop:jellyfinmediaplayer"),
+                                        QStringLiteral("desktop:org.mozilla.firefox") }));
+    QVERIFY(AppRegistry::shadowedApps({ app("desktop:kodi", "Kodi") }).isEmpty());
+    // Whole ids or exact names only, never a part of an id.
+    QVERIFY(AppRegistry::shadowedApps({ app("desktop:kodi", "Kodi Legacy"), app("flatpak:tv.kodi.Kodi", "Kodi") }).isEmpty());
+    QVERIFY(AppRegistry::shadowedApps({ app("desktop:settings", "Settings"),
+                                        app("flatpak:org.gnome.Settings", "GNOME Settings") }).isEmpty());
+    QCOMPARE(AppRegistry::shadowedApps({ app("desktop:TV.Kodi.Kodi", "Something"), app("flatpak:tv.kodi.Kodi", "Kodi") }),
+             QSet<QString> { QStringLiteral("desktop:TV.Kodi.Kodi") });
+
+    writeDesktop(m_sys, QStringLiteral("kodi.desktop"), "Name=Kodi\nExec=true\nCategories=AudioVideo;\n");
+    writeDesktop(m_flatpak, QStringLiteral("tv.kodi.Kodi.desktop"), "Name=Kodi\nExec=true\nCategories=AudioVideo;\n");
+    AppRegistry registry(config(), false);
+    QSignalSpy finished(&registry, &AppRegistry::scanFinished);
+    registry.rescan();
+    QVERIFY(finished.wait(5000));
+    QCOMPARE(registry.apps()->count(), 1);
+    QCOMPARE(registry.apps()->items().constFirst().key, QStringLiteral("flatpak:tv.kodi.Kodi"));
+    QCOMPARE(registry.media()->count(), 1);
+    // Still known: a favorite or history entry of the native one resolves.
+    QVERIFY(registry.contains(QStringLiteral("desktop:kodi")));
+    QVERIFY(registry.resolve(QStringLiteral("desktop:kodi")));
+    QVERIFY(registry.isShadowed(QStringLiteral("desktop:kodi")));
+    QVERIFY(!registry.command(QStringLiteral("desktop:kodi")).isEmpty());
 }
 
 QTEST_GUILESS_MAIN(TestAppRegistry)

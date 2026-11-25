@@ -155,6 +155,10 @@ public:
     // Install on the application window. Keys and mouse buttons are read in
     // eventFilter() before Qt Quick delivers them to items.
     void attachToWindow(QWindow *window);
+    // Further windows whose input is ours too (the Guide overlay, a
+    // separate layer-shell window). Same filtering as the main window.
+    void addWindow(QWindow *window);
+    void removeWindow(QWindow *window);
 
     // The keyboard table. Returns Action::None for unmapped keys.
     static KeyBinding keyActionFor(int key, Qt::KeyboardModifiers modifiers);
@@ -248,6 +252,7 @@ private:
     bool focusWantsText() const;
 
     QPointer<QWindow> m_window;
+    QList<QPointer<QWindow>> m_extraWindows;
     QTimer m_muteTimer;
     QTimer m_cursorHideTimer;
     QPointF m_lastPointer { -1, -1 };

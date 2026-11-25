@@ -1,0 +1,69 @@
+#!/bin/sh
+# MightyOS login session (PLAN D1, D5): labwc as the kiosk compositor with
+# MightyOS as its only client. This is the one shell script in MightyOS
+# (PLAN section 4): environment, labwc and a restart loop. It never runs a
+# command it is given and never leaves an interactive shell behind, so it
+# can be the kiosk user's login shell (README "Session").
+#
+#   mightyos-session        start labwc (a display manager's wayland-sessions
+#                           entry, greetd, or the kiosk user's login shell)
+#   mightyos-session --run  labwc's session client (-S): run MightyOS and
+#                           restart it when it ends unexpectedly, telling it
+#                           how the last run ended (--previous-status), which
+#                           is what its crash counter counts (D29).
+set -u
+PATH=/usr/bin:/bin
+export PATH
+
+SELF='@MIGHTYOS_SESSION_SELF@'
+MIGHTYOS='@MIGHTYOS_SESSION_MIGHTYOS@'
+LABWC='@MIGHTYOS_SESSION_LABWC@'
+LABWC_DIR='@MIGHTYOS_SESSION_LABWC_DIR@'
+RESTART_DELAY=@MIGHTYOS_SESSION_RESTART_DELAY@
+@MIGHTYOS_SESSION_DEV_OVERRIDES@
+case "${1:-}" in
+--run)
+    failures=0
+    previous=
+    while :; do
+        started=$(date +%s)
+        if [ -n "$previous" ]; then
+            "$MIGHTYOS" --session-mode --previous-status="$previous"
+        else
+            "$MIGHTYOS" --session-mode
+        fi
+        status=$?
+        # 0: left on purpose, or SIGTERM / SIGHUP (logout): the session ends.
+        [ "$status" -eq 0 ] && exit 0
+        # The compositor is gone (it crashed, or was killed): nothing to show on.
+        if [ -n "${LABWC_PID:-}" ] && ! kill -0 "$LABWC_PID" 2>/dev/null; then
+            exit "$status"
+        fi
+        # A run of 5 minutes or more starts the count again; 10 quick
+        # failures in a row end the session (back to the login screen).
+        [ $(( $(date +%s) - started )) -ge 300 ] && failures=0
+        failures=$((failures + 1))
+        [ "$failures" -ge 10 ] && exit "$status"
+        echo "mightyos-session: MightyOS exited with status $status, restarting" >&2
+        previous=$status
+        sleep "$RESTART_DELAY"
+    done
+    ;;
+'')
+    ;;
+*)
+    # As a login shell, `su -c ...`, scp or sftp would pass a command here.
+    echo "mightyos-session: this account only runs the MightyOS session" >&2
+    exit 1
+    ;;
+esac
+
+export XDG_CURRENT_DESKTOP=MightyOS
+export XDG_SESSION_DESKTOP=mightyos
+export XDG_SESSION_TYPE=wayland
+# Ctrl+Alt+F1..F12 switch VTs in every wlroots compositor (labwc has no
+# setting for it): srvrkeys:none makes them plain F-keys. Added to any
+# options the user set.
+export XKB_DEFAULT_OPTIONS="${XKB_DEFAULT_OPTIONS:+$XKB_DEFAULT_OPTIONS,}srvrkeys:none"
+# exec: if labwc can't start, the script (and a login shell) just ends.
+exec "$LABWC" -C "$LABWC_DIR" -S "'$SELF' --run"

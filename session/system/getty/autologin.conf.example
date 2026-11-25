@@ -1,0 +1,21 @@
+# Example only (README "Session"): boot straight into MightyOS on tty1.
+#
+# WARNING: autologin means anyone at the keyboard (or with a USB keyboard)
+# *is* the kiosk user, with no password asked. Use a dedicated kiosk user
+# that is in none of the groups `mightyos --check-session` warns about, lock
+# its password (sudo passwd -l KIOSKUSER) or give it a strong one, and
+# install the logind drop-in from ../logind.conf.d (no spare text consoles).
+#
+# Shell-less: make mightyos-session the kiosk user's login shell, so no
+# interactive shell exists to fall into when the session ends (the shell
+# exits, getty logs in again, MightyOS starts again):
+#   echo /usr/bin/mightyos-session | sudo tee -a /etc/shells
+#   sudo usermod -s /usr/bin/mightyos-session KIOSKUSER
+# (mightyos-session refuses to run commands: `su -c`, scp, sftp fail.)
+#
+# Then install this file as
+#   /etc/systemd/system/getty@tty1.service.d/autologin.conf
+# with KIOSKUSER replaced, and run: sudo systemctl daemon-reload
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin KIOSKUSER --noclear %I $TERM

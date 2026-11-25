@@ -1071,6 +1071,9 @@ QVariantList Library::emulatorChoices(const QString &key) const
             { QStringLiteral("available"), EmulatorLaunch::available(e, m_config.env) },
             { QStringLiteral("selected"), selected && selected->id == e.id },
             { QStringLiteral("isDefault"), e.id == def->defaultEmulator },
+            // Flatpak emulators: "strict" sandbox or the app's own ("app").
+            { QStringLiteral("sandbox"), e.type == EmulatorDef::Type::Native ? QString()
+                                          : e.appSandbox ? QStringLiteral("app") : QStringLiteral("strict") },
         });
     }
     return out;

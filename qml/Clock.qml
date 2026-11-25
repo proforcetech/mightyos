@@ -1,10 +1,14 @@
 import QtQuick
 
 // Locale short time. Wakes once per minute (aligned to the minute boundary)
-// rather than every second, to keep idle cost near zero.
+// rather than every second, to keep idle cost near zero; not at all while
+// `active` is false (dormant while an app runs). Turning it back on
+// refreshes at once.
 Text {
     textFormat: Text.PlainText
     id: clock
+
+    property bool active: true
 
     color: Theme.text
     font.family: Theme.fontFamily
@@ -17,8 +21,13 @@ Text {
         const fmt = Qt.locale().timeFormat(Locale.ShortFormat).replace(/:ss?/, "")
         text = now.toLocaleTimeString(Qt.locale(), fmt)
         tick.interval = (60 - now.getSeconds()) * 1000 - now.getMilliseconds() + 50
-        tick.restart()
+        if (active)
+            tick.restart()
+        else
+            tick.stop()
     }
+
+    onActiveChanged: refresh()
 
     Timer {
         id: tick

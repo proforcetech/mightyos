@@ -24,6 +24,7 @@
       "label": "Dolphin",
       "type": "flatpak",
       "app": "org.DolphinEmu.dolphin-emu",
+      "sandbox": "app",
       "args": [
         "-u",
         "{appdata}",

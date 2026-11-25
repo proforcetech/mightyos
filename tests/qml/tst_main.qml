@@ -17,6 +17,7 @@ Item {
 
     Component { id: mainComponent; Main {} }
     Component { id: spyComponent; SignalSpy {} }
+    Component { id: guideMenuComponent; GuideMenu {} }
 
     TestCase {
         name: "Main"
@@ -57,6 +58,8 @@ Item {
         }
 
         function cleanup() {
+            if (Launcher.running && !Launcher.tracked)
+                Launcher.terminate()
             tryVerify(() => !Launcher.running, 10000)
             InputRouter.muteFor(0)
         }
@@ -191,23 +194,181 @@ Item {
         }
 
         function test_guideWhileRunning() {
+            win.launchCommand = testApp(["--quit-after", "60000"])
             const heldSpy = createTemporaryObject(spyComponent, root,
                                                   { target: InputRouter, signalName: "guideHeld" })
+            const guide = findChild(win, "guideMenu")
+            verify(guide)
             verify(stack.push("games", { system: "nes" }, false))
             verify(act(InputRouter.Accept))
             verify(Launcher.running)
+            tryVerify(() => win.launchStarted, 5000)
             // A short Guide (and everything else) is blocked while it runs.
             verify(!InputRouter.dispatch(InputRouter.Guide, "", InputRouter.Gamepad))
             compare(stack.depth, 2)
-            // Held: the signal gets through (Guide overlay in M6).
+            // Held: the Guide menu (in this window: no layer shell offscreen).
+            verify(!Session.overlayAvailable)
             InputRouter.postGuideHeld(InputRouter.Gamepad)
             tryCompare(heldSpy, "count", 1)
-            verify(win.guideHeldWhileRunning)
-            tryVerify(() => !Launcher.running, 10000)
-            compare(stack.depth, 2)                      // nothing moved
+            tryVerify(() => win.guideOpen && guide.open)
+            verify(Session.guideOpen)
+            verify(!InputRouter.blocked)
+            compare(guide.currentIndex, 0)               // Resume first
+            InputRouter.muteFor(0)
+            // B resumes: the app keeps running, input is blocked again.
+            verify(InputRouter.dispatch(InputRouter.Back, "", InputRouter.Gamepad))
+            verify(!win.guideOpen)
+            verify(Launcher.running)
+            verify(InputRouter.blocked)
+            // Again; Close asks first and Cancel (the default) keeps it running.
+            InputRouter.postGuideHeld(InputRouter.Gamepad)
+            tryVerify(() => win.guideOpen)
+            InputRouter.muteFor(0)
+            verify(InputRouter.dispatch(InputRouter.Navigate, "down", InputRouter.Gamepad))
+            compare(guide.currentIndex, 1)
+            verify(InputRouter.dispatch(InputRouter.Navigate, "down", InputRouter.Gamepad))   // bump
+            compare(guide.currentIndex, 1)
+            verify(InputRouter.dispatch(InputRouter.Accept, "", InputRouter.Gamepad))
+            verify(guide.confirmOpen)
+            const confirm = findChild(guide, "guideConfirm")
+            compare(confirm.buttons[confirm.currentIndex].id, "cancel")
+            // The TV remote can't confirm here (D18), only cancel.
+            Settings.tvRemote = "full"
+            verify(!InputRouter.dispatch(InputRouter.Navigate, "right", InputRouter.Remote))
+            verify(!InputRouter.dispatch(InputRouter.Accept, "", InputRouter.Remote))
+            verify(InputRouter.dispatch(InputRouter.Back, "", InputRouter.Remote))
+            Settings.tvRemote = "navigation"
+            verify(!guide.confirmOpen)
+            verify(win.guideOpen)
+            verify(Launcher.running)
+            // Close for real.
+            verify(InputRouter.dispatch(InputRouter.Accept, "", InputRouter.Gamepad))
+            verify(guide.confirmOpen)
+            verify(InputRouter.dispatch(InputRouter.Navigate, "right", InputRouter.Gamepad))
+            verify(InputRouter.dispatch(InputRouter.Accept, "", InputRouter.Gamepad))
+            verify(!win.guideOpen)
+            tryVerify(() => !Launcher.running, 6000)
+            compare(stack.depth, 2)                      // back where it was launched
             verify(toast.shown)
-            verify(toast.message.indexOf("M6") >= 0, toast.message)
-            verify(!win.guideHeldWhileRunning)
+            verify(toast.message.indexOf("Closed") >= 0, toast.message)
+        }
+
+        function test_dormantWhileAnAppRuns() {
+            win.launchCommand = testApp(["--quit-after", "60000"])
+            verify(stack.push("games", { system: "nes" }, false))
+            verify(act(InputRouter.Accept))
+            tryVerify(() => win.launchStarted, 5000)
+            tryVerify(() => win.dormant && Session.dormant, 4000)
+            verify(!stack.visible)
+            // The Guide menu wakes it; resuming goes dormant again.
+            InputRouter.postGuideHeld(InputRouter.Gamepad)
+            tryVerify(() => win.guideOpen)
+            verify(!win.dormant)
+            win.closeGuide()
+            tryVerify(() => win.dormant, 4000)
+            Launcher.terminate()
+            tryVerify(() => !Launcher.running, 6000)
+            verify(!win.dormant)
+            verify(stack.visible)
+        }
+
+        function test_dormantWakeRestoresFocus() {
+            // Dormant hides the screens; when the app ends they come back
+            // with the launch's focus.
+            win.launchCommand = testApp(["--quit-after", "60000"])
+            verify(stack.push("games", { system: "snes" }, false))
+            for (let i = 0; i < 3; ++i)
+                verify(act(InputRouter.Navigate, "right"))
+            compare(gridIndex(), 3)
+            verify(act(InputRouter.Accept))
+            tryVerify(() => win.launchStarted, 5000)
+            tryVerify(() => win.dormant, 4000)
+            verify(!stack.visible)
+            // The overlay window's menu (layer shell) doesn't wake this window.
+            const fake = createTemporaryObject(guideMenuComponent, root)
+            win.overlayMenu = fake
+            win.guideOpen = true
+            wait(50)
+            verify(win.dormant)
+            win.guideOpen = false
+            win.overlayMenu = null
+            Launcher.terminate()
+            tryVerify(() => !Launcher.running, 6000)
+            verify(!win.dormant)
+            verify(stack.visible)
+            compare(stack.current.screenId, "games")
+            compare(gridIndex(), 3)
+            verify(win.launchScreen === null)
+        }
+
+        function test_remoteHomeInTheGuideMenu() {
+            // D25/D18: navigation only never closes; full: a second Home
+            // inside the menu closes a closable launch.
+            const before = Settings.tvRemote
+            win.launchCommand = testApp(["--quit-after", "60000"])
+            verify(stack.push("games", { system: "nes" }, false))
+            verify(act(InputRouter.Accept))
+            tryVerify(() => win.launchStarted, 5000)
+            win.launchClosable = true
+            Settings.tvRemote = "navigation"
+            InputRouter.postGuideHeld(InputRouter.Remote)
+            tryVerify(() => win.guideOpen)
+            InputRouter.muteFor(0)
+            verify(!win.remoteCloseArmed)
+            verify(!InputRouter.dispatch(InputRouter.Navigate, "down", InputRouter.Remote))
+            verify(InputRouter.dispatch(InputRouter.Guide, "", InputRouter.Remote))
+            verify(!win.guideOpen)
+            verify(Launcher.running)
+            Settings.tvRemote = "full"
+            InputRouter.postGuideHeld(InputRouter.Remote)
+            tryVerify(() => win.guideOpen && win.remoteCloseArmed)
+            InputRouter.muteFor(0)
+            verify(InputRouter.dispatch(InputRouter.Guide, "", InputRouter.Remote))
+            tryVerify(() => !Launcher.running, 6000)
+            Settings.tvRemote = before
+        }
+
+        function test_leaveTheSession() {
+            // S1: Ctrl+Alt+Backspace asks first (Stay is the default and the
+            // remote's only answer); a kids profile gets "Ask a parent".
+            Session.requestQuit()
+            verify(dialog.open)
+            compare(dialog.title, "Leave MightyOS?")
+            compare(dialog.buttons[dialog.currentIndex].id, "stay")
+            Settings.tvRemote = "full"
+            verify(!InputRouter.dispatch(InputRouter.Navigate, "right", InputRouter.Remote))
+            verify(InputRouter.dispatch(InputRouter.Back, "", InputRouter.Remote))
+            Settings.tvRemote = "navigation"
+            verify(!dialog.open)
+            const baseId = ProfileService.activeId
+            const kid = ProfileService.create("Quitkid", "cat", "#ff6b8b", "kids")
+            verify(kid.length > 0)
+            win.enterProfile(kid)
+            verify(Library.restricted)
+            Session.requestQuit()
+            verify(!dialog.open)
+            verify(toast.message.indexOf("Ask a parent") >= 0, toast.message)
+            win.enterProfile(baseId)
+            ProfileService.remove(kid)
+        }
+
+        function test_panicKeysWhileRunning() {
+            win.launchCommand = testApp(["--quit-after", "60000"])
+            // Ctrl+Alt+Home (SIGUSR1) toggles the Guide menu; Ctrl+Alt+End
+            // (SIGUSR2) closes the app at once.
+            verify(stack.push("games", { system: "nes" }, false))
+            verify(act(InputRouter.Accept))
+            tryVerify(() => win.launchStarted, 5000)
+            Session.requestGuide()
+            verify(win.guideOpen)
+            Session.requestGuide()
+            verify(!win.guideOpen)
+            Session.requestClose()
+            tryVerify(() => !Launcher.running, 6000)
+            verify(toast.message.indexOf("Closed") >= 0, toast.message)
+            // Nothing running: the Home key goes Home.
+            Session.requestGuide()
+            compare(stack.depth, 1)
         }
 
         function openControllers() {

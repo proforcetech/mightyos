@@ -600,7 +600,7 @@ LaunchPlan plan(const WebAppDef &app, const QString &profileId, const LaunchEnv 
     }
     p.emulatorId = choice.browser->id;
     if (choice.flatpak)
-        p.argv = QStringList { choice.program, QStringLiteral("run") } + flatpakSandboxArgs()
+        p.argv = QStringList { choice.program, QStringLiteral("run"), QStringLiteral("--die-with-parent") } + flatpakSandboxArgs()
                  + QStringList { choice.browser->flatpakId };
     else
         p.argv = { choice.program };

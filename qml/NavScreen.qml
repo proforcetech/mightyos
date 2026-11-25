@@ -401,6 +401,7 @@ Item {
             id: "emu:" + c.id,
             label: c.label + (c.selected ? "  ·  " + qsTr("current") : "")
                    + (c.available ? "" : "  ·  " + qsTr("not installed"))
+                   + (c.sandbox === "app" ? "  ·  " + qsTr("full app access") : "")
         }))
         if (row.kind === "game")
             items.push({ id: "emu:", label: qsTr("Use the system default") })

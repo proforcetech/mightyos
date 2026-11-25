@@ -204,7 +204,7 @@ void TestMoonlight::streamArgv()
     write(tmp.path() + QStringLiteral("/bin/flatpak"), "#!/bin/false\n");
     QFile::setPermissions(tmp.path() + QStringLiteral("/bin/flatpak"), QFile::ReadOwner | QFile::ExeOwner);
     plan = Moonlight::planStream(QStringLiteral("htpc"), QStringLiteral("Desktop"), true, env);
-    QCOMPARE(plan.argv.mid(0, 4), (QStringList { tmp.path() + QStringLiteral("/bin/flatpak"), QStringLiteral("run"),
+    QCOMPARE(plan.argv.mid(0, 5), (QStringList { tmp.path() + QStringLiteral("/bin/flatpak"), QStringLiteral("run"), QStringLiteral("--die-with-parent"),
                                                  Moonlight::kFlatpakId, QStringLiteral("stream") }));
     QCOMPARE(Moonlight::planStream(QStringLiteral("htpc"), QStringLiteral("Desktop"), false, env).argv.at(0),
              tmp.path() + QStringLiteral("/bin/moonlight"));

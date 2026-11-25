@@ -38,6 +38,27 @@ QString vectorIconFor(const QString &category)
 
 } // namespace
 
+QSet<QString> AppRegistry::shadowedApps(const QList<AppInfo> &apps)
+{
+    QSet<QString> flatpakIds;
+    QSet<QString> flatpakTitles;
+    for (const AppInfo &app : apps) {
+        if (!app.id.startsWith(QLatin1String("flatpak:")))
+            continue;
+        flatpakIds.insert(app.id.mid(8).toLower());
+        if (!app.title.isEmpty())
+            flatpakTitles.insert(app.title);
+    }
+    QSet<QString> shadowed;
+    for (const AppInfo &app : apps) {
+        if (!app.id.startsWith(QLatin1String("desktop:")))
+            continue;
+        if (flatpakIds.contains(app.id.mid(8).toLower()) || flatpakTitles.contains(app.title))
+            shadowed.insert(app.id);
+    }
+    return shadowed;
+}
+
 AppRegistry::AppRegistry(QObject *parent)
     : AppRegistry(AppScanConfig::fromEnvironment(), true, parent, defaultCacheFile())
 {
@@ -125,15 +146,21 @@ void AppRegistry::applyResult(const AppScanResult &result, bool fromScan)
     QHash<QString, AppInfo> byId;
     QList<TileItem> all;
     QList<TileItem> media;
+    const QSet<QString> shadowed = shadowedApps(result.apps);
     for (const AppInfo &app : result.apps) {
         byId.insert(app.id, app);
+        if (shadowed.contains(app.id))
+            continue;   // the Flatpak of the same app has the tile
         const TileItem tile = tileFor(app);
         all.append(tile);
         if (app.category == QLatin1String("media"))
             media.append(tile);
     }
-    const bool changed = byId != m_byId;
+    const bool changed = byId != m_byId || shadowed != m_shadowed;
     m_byId = byId;
+    m_shadowed = shadowed;
+    if (!shadowed.isEmpty())
+        qCInfo(lcAppScan) << "native apps hidden behind their Flatpak:" << shadowed.size();
     m_apps.setItems(all);
     m_media.setItems(media);
 

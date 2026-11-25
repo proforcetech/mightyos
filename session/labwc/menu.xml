@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<!-- MightyOS kiosk session: no compositor menus (nothing binds ShowMenu;
+     empty definitions replace labwc's built-in ones in case one is ever
+     reached). -->
+<openbox_menu>
+  <menu id="root-menu" label=""></menu>
+  <menu id="client-menu" label=""></menu>
+</openbox_menu>

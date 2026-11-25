@@ -21,6 +21,9 @@ struct LaunchEnv {
     // and trust their own uid.
     QString systemRoot;
     uint trustedUid = 0;
+    // For the ROM-folder allowlist (/run/media/<user>) and its denylist.
+    QString user;
+    QString runtimeDir;                  // $XDG_RUNTIME_DIR
 
     static LaunchEnv fromEnvironment();
     QString findProgram(const QString &name) const;
@@ -62,18 +65,49 @@ struct LaunchPlan {
 //    write), turns network commands, stdin commands and netplay
 //    announcing off (PLAN section 4) and, for kids profiles, enables kiosk
 //    mode and hides the online/core updaters, Load Core and Load Content.
-//  - Flatpak: flatpak run <app> <args with {rom}/{saves}/{appdata}
+//  - Flatpak: flatpak run <sandbox args> <app> <args with {rom}/{saves}/{appdata}
 //    substituted>. {appdata} is a per-profile dir inside the app's own
 //    ~/.var/app/<app>/data (writable by the sandbox), for emulators with a
 //    "user folder" option (Dolphin -u).
 //  - Native: <program from PATH or absolute> <args>.
 // Placeholders are replaced only as whole elements. The ROM path is the
 // verified absolute path, so it can't be mistaken for an option.
+//
+// Flatpak sandbox (PLAN section 4, D16, D30; flatpakSandboxArgs()). Every
+// Flatpak emulator launch runs `flatpak run --die-with-parent` (it goes
+// when MightyOS goes) and gets the system's ROM folders read-only
+// (--filesystem=<canonical dir>:ro; the ROM's own folder if no ROM folder
+// holds it). ROM folders are resolved (realpath) and must be a strict,
+// non-hidden subfolder of $HOME (not $HOME itself, nothing under a
+// dot-folder such as .config, .local, .ssh, .var) or of /media,
+// /run/media/<user>, /mnt or /srv; anything else (/, /home, /root, /tmp,
+// /var, /run, $XDG_RUNTIME_DIR, system trees, ':' in the path) is not
+// passed (romDirProblem() says why; --check-session lists them).
+//
+// Strict (the default; "sandbox": "app" only from root-owned layers, see
+// SystemRegistry) also resets every filesystem the app asked for
+// (--nofilesystem=host:reset) and adds back only /run/udev (read-only, pad
+// hotplug), the ROM folders, MightyOS's config dir (RetroArch) and a
+// {saves} dir inside MightyOS's own data/state dirs (read-write); only the
+// GPU and input devices (--nodevice=all --device=dri --device=input; sound
+// is a socket); no session bus, system bus, ssh-agent or X11 sockets; no
+// network (--unshare=network: netplay is off anyway). The app's own
+// ~/.var/app dir (cores, BIOS, saves) always stays.
 namespace EmulatorLaunch {
 
 static inline const QString kRetroArchFlatpak = QStringLiteral("org.libretro.RetroArch");
 
 QStringList substitute(const QStringList &args, const QHash<QString, QString> &values);
+
+// The canonical form of a ROM folder Flatpak emulators may see, or "" with
+// `*problem` saying why not (see above).
+QString allowedRomDir(const QString &dir, const LaunchEnv &env, QString *problem = nullptr);
+// The flatpak run options for one launch (see above). `rwDirs`: extra
+// read-write dirs (only those inside env.dataHome/mightyos or
+// env.stateHome/mightyos are honoured). `rejected` gets the ROM folders
+// that weren't passed, with the reason.
+QStringList flatpakSandboxArgs(const SystemDef &system, const QString &romPath, bool strict, const LaunchEnv &env,
+                               const QStringList &rwDirs = {}, QStringList *rejected = nullptr);
 
 // Whether `emulator` could launch right now (for menus).
 bool available(const EmulatorDef &emulator, const LaunchEnv &env);
